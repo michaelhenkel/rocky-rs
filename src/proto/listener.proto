@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package listener;
+
+service Listener {
+  rpc Send (SendRequest) returns (SendReply) {}
+}
+
+message SendRequest {
+  uint32 id = 1;
+  string address = 2;
+  Operation op = 3;
+  uint32 messages = 4;
+  uint32 messageSize = 5;
+  Mtu mtu = 6;
+}
+
+message SendReply {
+  string message = 1;
+}
+
+enum Operation {
+  SEND = 0;
+  SEND_WITH_IMM = 1;
+}
+
+enum Mtu {
+  MTU_512 = 0;
+  MTU_1024 = 1;
+  MTU_2048 = 2;
+  MTU_4096 = 3;
+}
+
