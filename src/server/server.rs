@@ -79,7 +79,8 @@ async fn listener(address: String, port: u16, messages: u32, message_size: u32, 
         set_max_message_length(message_size as usize).
         set_mtu(mtu).
         listen(address.clone()).await?;
-    for _ in 0..messages{
+    for idx in 0..messages{
+        info!("starting listener {}", idx);
         let res = tokio::select! {
             ret = receive(&rdma) => {
                 ret
@@ -91,19 +92,25 @@ async fn listener(address: String, port: u16, messages: u32, message_size: u32, 
         if let Err(e) = res {
             error!("receive error: {}", e);
         }
+        
     }
+    info!("done listening");
     Ok(())
 }
 
 pub async fn receive(rdma: &Rdma) -> anyhow::Result<()> {
+    info!("receiving");
     let lmr = rdma.receive().await?;
-    let _data = *lmr.as_slice();
+    let data = lmr.as_slice();
+    info!("received: {:?}", data.len());
     Ok(())
     
 }
 
 pub async fn receive_with_imm(rdma: &Rdma) -> anyhow::Result<()> {
+    info!("receiving with imm");
     let (lmr, _imm) = rdma.receive_with_imm().await?;
-    let _data = *lmr.as_slice();
+    let data = lmr.as_slice();
+    info!("received: {:?}", data.len());
     Ok(())
 }

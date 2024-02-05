@@ -11,7 +11,9 @@ pub struct SendRequest {
     pub messages: u32,
     #[prost(uint32, tag = "5")]
     pub message_size: u32,
-    #[prost(enumeration = "Mtu", tag = "6")]
+    #[prost(uint32, tag = "6")]
+    pub message_volume: u32,
+    #[prost(enumeration = "Mtu", tag = "7")]
     pub mtu: i32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

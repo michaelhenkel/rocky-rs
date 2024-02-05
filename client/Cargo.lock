@@ -124,7 +124,7 @@ dependencies = [
 [[package]]
 name = "async-rdma"
 version = "0.5.0"
-source = "git+ttps://github.com/datenlord/async-rdma.git#9480131f671eb97ded1ccfd5bb8d7bdc75be66fa"
+source = "git+https://github.com/datenlord/async-rdma.git#9480131f671eb97ded1ccfd5bb8d7bdc75be66fa"
 dependencies = [
  "async-bincode",
  "async-trait",
@@ -1611,8 +1611,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-rdma",
+ "byte-unit",
  "clap 4.4.18",
  "env_logger 0.11.1",
+ "futures",
  "log",
  "portpicker",
  "prost",

@@ -12,7 +12,8 @@ message SendRequest {
   Operation op = 3;
   uint32 messages = 4;
   uint32 messageSize = 5;
-  Mtu mtu = 6;
+  uint32 messageVolume = 6;
+  Mtu mtu = 7;
 }
 
 message SendReply {

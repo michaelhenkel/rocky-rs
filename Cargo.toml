@@ -10,13 +10,17 @@ path = "src/initiator/lib.rs"
 
 [dependencies]
 anyhow = "1.0.79"
-async-rdma = { git = "ttps://github.com/datenlord/async-rdma.git" , features = ["cm"] }
+async-rdma = { git = "https://github.com/datenlord/async-rdma.git" , features = ["cm"] }
+#async-rdma = { path = "../async-rdma" , features = ["cm"] }
+byte-unit = "5.1.4"
 clap = { version = "4.4.18", features = ["derive"] }
 env_logger = "0.11.1"
+futures = "0.3.30"
 log = "0.4.20"
 portpicker = "0.1.1"
 prost = "0.12.3"
 serde = { version = "1.0.196", features = ["derive", "serde_derive"] }
+#tokio = { version = "1.36.0", features = ["full"] }
 tokio = { version = "=1.29.1", features = ["full"] }
 tonic = "0.10.2"
 tracing-subscriber = "0.3.18"
