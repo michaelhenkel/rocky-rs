@@ -8,7 +8,7 @@ pub struct SendRequest {
     #[prost(enumeration = "Operation", tag = "3")]
     pub op: i32,
     #[prost(uint32, tag = "4")]
-    pub messages: u32,
+    pub message_volume: u32,
     #[prost(uint32, tag = "5")]
     pub message_size: u32,
     #[prost(enumeration = "Mtu", tag = "6")]

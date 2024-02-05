@@ -10,7 +10,7 @@ message SendRequest {
   uint32 id = 1;
   string address = 2;
   Operation op = 3;
-  uint32 messages = 4;
+  uint32 messageVolume = 4;
   uint32 messageSize = 5;
   Mtu mtu = 6;
 }

@@ -25,7 +25,7 @@ struct Args{
     #[clap(short, long)]
     message_size: Option<String>,
     #[clap(short, long)]
-    messages: Option<u32>,
+    message_volume: Option<String>,
     #[clap(short, long)]
     mtu: Option<MtuSize>,
 }
@@ -42,12 +42,17 @@ impl Into<SendRequest> for Args {
         } else {
             8
         };
+        let message_volume = if let Some(message_volume) = self.message_volume{
+            Byte::parse_str(&message_volume, true).unwrap().as_u64() as u32
+        } else {
+            1
+        };
         SendRequest{
             id: self.id,
             address: format!("{}:{}", self.server, self.server_port),
             op: Operation::from(self.op).into(),
             message_size,
-            messages: self.messages.unwrap_or(1),
+            message_volume,
             mtu: mtu.into(),
         }
     }
