@@ -4,7 +4,7 @@ pub struct ConnectRequest {
     #[prost(uint32, tag = "1")]
     pub id: u32,
     #[prost(uint32, tag = "2")]
-    pub messages: u32,
+    pub iterations: u32,
     #[prost(uint32, tag = "3")]
     pub message_size: u32,
     #[prost(uint32, tag = "4")]
