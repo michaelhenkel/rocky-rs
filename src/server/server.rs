@@ -24,9 +24,10 @@ impl Connection for Server {
         let iterations = request.get_ref().iterations;
         let message_size = request.get_ref().message_size;
         let mtu = request.get_ref().mtu;
+        let volume = request.get_ref().volume;
         info!("spawning listener at {}:{}", address, port);
         tokio::spawn(async move{
-            listener(address, port, iterations, message_size, mtu).await
+            listener(address, port, iterations, message_size, volume, mtu).await
         });
         let reply = ConnectReply{
             port: port as u32,
@@ -65,7 +66,7 @@ impl Server {
 
 }
 
-async fn listener(address: String, port: u16, iterations: u32, message_size: u32, mtu: u32) -> anyhow::Result<()> {
+async fn listener(address: String, port: u16, iterations: u32, message_size: u32, volume: u32, mtu: u32) -> anyhow::Result<()> {
     let address = format!("{}:{}", address, port);
     let mtu = match mtu {
         512 => MTU::MTU512,
@@ -75,25 +76,28 @@ async fn listener(address: String, port: u16, iterations: u32, message_size: u32
         _ => MTU::MTU1024,
     };
     info!("listening for rdma at {}", address);
-
-
     info!("expecting {} iterations with size {}", iterations, message_size);
-    for _ in 0..iterations{
-        let rdma = RdmaBuilder::default().
-        set_max_message_length(message_size as usize).
-        set_mtu(mtu).
-        listen(address.clone()).await?;
 
-        let res = tokio::select! {
-            ret = receive(&rdma) => {
-                ret
-            },
-            ret = receive_with_imm(&rdma) => {
-                ret
-            },
-        };
-        if let Err(e) = res {
-            error!("receive error: {}", e);
+    let mut rdma = RdmaBuilder::default().
+    set_max_message_length(message_size as usize).
+    set_mtu(mtu).
+    listen(address.clone()).await?;
+    let receives = volume/message_size;
+    
+    for _ in 0..iterations{
+        rdma = rdma.listen().await?;
+        for _ in 0..receives{
+            let res = tokio::select! {
+                ret = receive(&rdma) => {
+                    ret
+                },
+                ret = receive_with_imm(&rdma) => {
+                    ret
+                },
+            };
+            if let Err(e) = res {
+                error!("receive error: {}", e);
+            }
         }
     }
     Ok(())

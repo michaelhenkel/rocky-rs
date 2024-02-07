@@ -2,7 +2,6 @@ use clap::Parser;
 use log::info;
 pub mod server;
 pub mod initiator;
-pub mod queue;
 
 #[derive(Parser, Debug)]
 struct Args{

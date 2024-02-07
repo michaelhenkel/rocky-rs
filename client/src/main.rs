@@ -24,6 +24,8 @@ struct Args{
     op: ClientOperation,
     #[clap(short, long)]
     message_size: Option<String>,
+    #[clap(short, long)]
+    volume: Option<String>,
     #[clap(short='n' , long)]
     iterations: Option<u32>,
     #[clap(short, long)]
@@ -42,12 +44,22 @@ impl Into<SendRequest> for Args {
         } else {
             8
         };
+        let volume = if let Some(volume) = self.volume{
+            let volume = Byte::parse_str(&volume, true).unwrap().as_u64() as u32;
+            if volume % message_size != 0 {
+                panic!("volume must be a multiple of message size")
+            }
+            volume
+        } else {
+            message_size
+        };
         let iterations = self.iterations.unwrap_or(1);
         SendRequest{
             id: self.id,
             address: format!("{}:{}", self.server, self.server_port),
             op: Operation::from(self.op).into(),
             message_size,
+            volume,
             iterations,
             mtu: mtu.into(),
         }

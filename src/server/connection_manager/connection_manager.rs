@@ -8,6 +8,8 @@ pub struct ConnectRequest {
     #[prost(uint32, tag = "3")]
     pub message_size: u32,
     #[prost(uint32, tag = "4")]
+    pub volume: u32,
+    #[prost(uint32, tag = "5")]
     pub mtu: u32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

@@ -49,6 +49,7 @@ pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
         id: request.id,
         iterations: request.iterations,
         message_size: request.message_size,
+        volume: request.volume,
         mtu
     });
     let response = init_client.init(connect_request).await?;
@@ -61,43 +62,73 @@ pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
         let start = tokio::time::Instant::now();
         let mut stats = Stats::default();
         info!("sending {} iterations with size {}", request.iterations, request.message_size);
+        let mut rdma = RdmaBuilder::default().
+        set_max_message_length(request.message_size as usize).
+        set_mtu(mtu_2).
+        connect(server_address.clone()).await.unwrap();
         for _ in 0..request.iterations{
-            let b = RdmaBuilder::default().
-            set_max_message_length(request.message_size as usize).
-            set_mtu(mtu_2).
-            connect(server_address.clone());
-            let rdma = match b.await{
-                Ok(rdma) => rdma,
+            let sends = request.volume/request.message_size;
+            
+            rdma = rdma.new_connect(server_address.clone()).await.unwrap();
+            info!("allocating {} bytes", request.message_size as usize);
+            let layout = Layout::from_size_align(request.message_size as usize, 1).unwrap();
+            let mut lmr = match rdma.alloc_local_mr(layout){
+                Ok(lmr) => lmr,
                 Err(e) => {
-                    error!("rdma connect error: {}", e);
-                    return;
+                    panic!("alloc_local_mr error: {}", e);
                 }
             };
-            let layout = Layout::from_size_align(request.message_size as usize, 1).unwrap();
-            let mut lmr = rdma.alloc_local_mr(layout).unwrap();
+            info!("allocation done, writing to memory");
             let buf = vec![1_u8; request.message_size as usize];
             let _num = lmr.as_mut_slice().write(buf.as_slice()).unwrap();
-            //let rdma = rdma.new_connect(server_address.clone()).await.unwrap();
-            let res = match op{
-                Operation::Send => {
-                    send(&rdma, &lmr).await
-                },
-                Operation::SendWithImm => {
-                    send_with_imm(&rdma).await
-                },
-            };
-            match res {
-                Ok(_) => {
-                    stats.messages += 1;
-                    stats.total_message_size += request.message_size;
-                    stats.total_time += start.elapsed().as_millis();
-                },
-                Err(e) => error!("operation error: {}", e),
+            info!("writing done, sending message");
+            for _ in 0..sends{
+                let res = match op{
+                    Operation::Send => {
+                        send(&rdma, &lmr).await
+                    },
+                    Operation::SendWithImm => {
+                        send_with_imm(&rdma).await
+                    },
+                };
+                match res {
+                    Ok(_) => {
+                        stats.messages += 1;
+                        stats.total_message_size += request.message_size;
+                    },
+                    Err(e) => error!("operation error: {}", e),
+                }
             }
+            let bytes = stats.total_message_size;
+            let bits = (bytes*8) as u64;
+            let seconds = start.elapsed().as_secs();
+            let milliseconds = start.elapsed().as_millis();
+            let bps = bits/seconds;
+            let kbps = bps/1000;
+            let mbps = kbps/1000;
+            let gbs = mbps/1000;
+            let total_time = if milliseconds > 1000 {
+                format!("{} s", seconds)
+            } else {
+                format!("{} ms", milliseconds)
+            };
+            stats.total_time = total_time;
+            let rate = if gbs > 1 {
+                format!("{} Gbps", gbs)
+            } else if mbps > 1 {
+                format!("{} Mbps", mbps)
+            } else if kbps > 1 {
+                format!("{} Kbps", kbps)
+            } else {
+                format!("{} bps", bps)
+            };
+            stats.rate = rate;
 
+            /*
             let ptr = lmr.as_mut_ptr();
             unsafe { ptr.drop_in_place() };
             drop(buf);
+            */
         }
         info!("stats: \n{:#?}", stats);
 
@@ -148,6 +179,7 @@ impl Listener for Initiator {
 struct Stats{
     messages: u32,
     total_message_size: u32,
-    total_time: u128,
+    total_time: String,
+    rate: String,
 }
 
