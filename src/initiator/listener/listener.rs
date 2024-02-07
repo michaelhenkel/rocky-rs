@@ -9,10 +9,10 @@ pub struct SendRequest {
     pub op: i32,
     #[prost(uint32, tag = "4")]
     pub iterations: u32,
-    #[prost(uint32, tag = "5")]
-    pub message_size: u32,
-    #[prost(uint32, tag = "6")]
-    pub volume: u32,
+    #[prost(uint64, tag = "5")]
+    pub message_size: u64,
+    #[prost(uint64, tag = "6")]
+    pub volume: u64,
     #[prost(enumeration = "Mtu", tag = "7")]
     pub mtu: i32,
 }

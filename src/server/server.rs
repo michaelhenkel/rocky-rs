@@ -1,4 +1,4 @@
-use async_rdma::{LocalMrReadAccess, Rdma, RdmaBuilder, MTU};
+use async_rdma::{LocalMrReadAccess, MrAccess, Rdma, RdmaBuilder, MTU};
 use crate::server::connection_manager::connection_manager::{
     connection_server::{Connection, ConnectionServer},
     ConnectReply, ConnectRequest,
@@ -6,6 +6,7 @@ use crate::server::connection_manager::connection_manager::{
 use tonic::transport::Server as GrpcServer;
 use log::{error, info};
 use portpicker;
+use crate::initiator::initiator::{Stats,StatsMap};
 
 pub struct Server{
     address: String,
@@ -66,7 +67,7 @@ impl Server {
 
 }
 
-async fn listener(address: String, port: u16, iterations: u32, message_size: u32, volume: u32, mtu: u32) -> anyhow::Result<()> {
+async fn listener(address: String, port: u16, iterations: u32, message_size: u64, volume: u64, mtu: u32) -> anyhow::Result<()> {
     let address = format!("{}:{}", address, port);
     let mtu = match mtu {
         512 => MTU::MTU512,
@@ -77,15 +78,19 @@ async fn listener(address: String, port: u16, iterations: u32, message_size: u32
     };
     info!("listening for rdma at {}", address);
     info!("expecting {} iterations with size {}", iterations, message_size);
-
+    let mut stats_map = StatsMap::new();
     let mut rdma = RdmaBuilder::default().
     set_max_message_length(message_size as usize).
     set_mtu(mtu).
     listen(address.clone()).await?;
     let receives = volume/message_size;
+
     
-    for _ in 0..iterations{
+    for it in 0..iterations{
+        let mut total_message_size: u64 = 0;
+        let mut message_count = 0;
         rdma = rdma.listen().await?;
+        let start = tokio::time::Instant::now();
         for _ in 0..receives{
             let res = tokio::select! {
                 ret = receive(&rdma) => {
@@ -95,23 +100,32 @@ async fn listener(address: String, port: u16, iterations: u32, message_size: u32
                     ret
                 },
             };
-            if let Err(e) = res {
-                error!("receive error: {}", e);
+            match res {
+                Ok(len) => {
+                    total_message_size += len as u64;
+                    message_count += 1;
+                },
+                Err(e) => {
+                    error!("receive error: {}", e);
+                }
             }
         }
+        let stats = Stats::new(total_message_size, message_count, start);
+        stats_map.push(it, stats);
     }
+    info!("\n{}", stats_map);
     Ok(())
 }
 
-pub async fn receive(rdma: &Rdma) -> anyhow::Result<()> {
+pub async fn receive(rdma: &Rdma) -> anyhow::Result<usize> {
     let lmr = rdma.receive().await?;
     let _data = *lmr.as_slice();
-    Ok(())
+    Ok(lmr.length())
     
 }
 
-pub async fn receive_with_imm(rdma: &Rdma) -> anyhow::Result<()> {
+pub async fn receive_with_imm(rdma: &Rdma) -> anyhow::Result<usize> {
     let (lmr, _imm) = rdma.receive_with_imm().await?;
     let _data = *lmr.as_slice();
-    Ok(())
+    Ok(lmr.length())
 }

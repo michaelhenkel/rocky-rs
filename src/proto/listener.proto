@@ -11,8 +11,8 @@ message SendRequest {
   string address = 2;
   Operation op = 3;
   uint32 iterations = 4;
-  uint32 messageSize = 5;
-  uint32 volume = 6;
+  uint64 messageSize = 5;
+  uint64 volume = 6;
   Mtu mtu = 7;
 }
 

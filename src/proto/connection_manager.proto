@@ -9,8 +9,8 @@ service Connection {
 message ConnectRequest {
   uint32 id = 1;
   uint32 iterations = 2;
-  uint32 message_size = 3;
-  uint32 volume = 4;
+  uint64 message_size = 3;
+  uint64 volume = 4;
   uint32 mtu = 5;
 }
 

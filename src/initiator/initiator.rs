@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::{alloc::Layout, io::Write};
 use async_rdma::{LocalMr, LocalMrWriteAccess, Rdma, RdmaBuilder, MTU};
 use log::{error, info};
@@ -59,14 +60,16 @@ pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
     info!("connecting to server at {}", server_address);
     let op = Operation::try_from(request.op).unwrap();
     tokio::task::spawn(async move{
-        let start = tokio::time::Instant::now();
-        let mut stats = Stats::default();
+        let mut stats_map = StatsMap::new();
         info!("sending {} iterations with size {}", request.iterations, request.message_size);
         let mut rdma = RdmaBuilder::default().
         set_max_message_length(request.message_size as usize).
         set_mtu(mtu_2).
         connect(server_address.clone()).await.unwrap();
-        for _ in 0..request.iterations{
+        for it in 0..request.iterations{
+            
+            let mut message_count = 0;
+            let mut total_message_size: u64 = 0;
             let sends = request.volume/request.message_size;
             
             rdma = rdma.new_connect(server_address.clone()).await.unwrap();
@@ -81,6 +84,7 @@ pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
             info!("allocation done, writing to memory");
             let buf = vec![1_u8; request.message_size as usize];
             let _num = lmr.as_mut_slice().write(buf.as_slice()).unwrap();
+            let start = tokio::time::Instant::now();
             info!("writing done, sending message");
             for _ in 0..sends{
                 let res = match op{
@@ -93,36 +97,14 @@ pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
                 };
                 match res {
                     Ok(_) => {
-                        stats.messages += 1;
-                        stats.total_message_size += request.message_size;
+                        message_count += 1;
+                        total_message_size += request.message_size;
                     },
                     Err(e) => error!("operation error: {}", e),
                 }
             }
-            let bytes = stats.total_message_size;
-            let bits = (bytes*8) as u64;
-            let seconds = start.elapsed().as_secs();
-            let milliseconds = start.elapsed().as_millis();
-            let bps = bits/seconds;
-            let kbps = bps/1000;
-            let mbps = kbps/1000;
-            let gbs = mbps/1000;
-            let total_time = if milliseconds > 1000 {
-                format!("{} s", seconds)
-            } else {
-                format!("{} ms", milliseconds)
-            };
-            stats.total_time = total_time;
-            let rate = if gbs > 1 {
-                format!("{} Gbps", gbs)
-            } else if mbps > 1 {
-                format!("{} Mbps", mbps)
-            } else if kbps > 1 {
-                format!("{} Kbps", kbps)
-            } else {
-                format!("{} bps", bps)
-            };
-            stats.rate = rate;
+            let stats = Stats::new(total_message_size, message_count, start);
+            stats_map.push(it, stats);
 
             /*
             let ptr = lmr.as_mut_ptr();
@@ -130,7 +112,7 @@ pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
             drop(buf);
             */
         }
-        info!("stats: \n{:#?}", stats);
+        info!("\n{}", stats_map);
 
     });
 
@@ -176,10 +158,82 @@ impl Listener for Initiator {
 }
 
 #[derive(Debug, Default)]
-struct Stats{
-    messages: u32,
-    total_message_size: u32,
-    total_time: String,
-    rate: String,
+pub struct StatsMap(Vec<(u32, Stats)>);
+
+impl StatsMap{
+    pub fn new() -> StatsMap{
+        StatsMap(Vec::new())
+    }
+    pub fn push(&mut self, it: u32, stats: Stats){
+        self.0.push((it, stats));
+    }
 }
 
+impl Display for StatsMap{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = String::new();
+        for (it, stats) in self.0.iter(){
+            s.push_str(&format!("iteration: {}\n{}\n", it, stats));
+            
+        }
+        write!(f, "{}",s)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Stats{
+    pub messages: u32,
+    pub total_message_size: u64,
+    pub total_time: String,
+    pub rate: String,
+}
+
+impl Stats{
+    pub fn new(total_message_size: u64, messages: u32, start: tokio::time::Instant) -> Stats{
+        let bytes = total_message_size;
+        let bits = (bytes*8) as f64;
+        let seconds = start.elapsed().as_secs_f64();
+        let milliseconds = start.elapsed().as_millis();
+
+        let bps = if seconds > 0.0 {
+            bits/seconds
+        } else {
+            let factor = milliseconds as f64/1000.0;
+            let bits = bits + factor;
+            bits
+        };
+
+        let total_time: String = if milliseconds > 1000 {
+            format!("{:.2} s", seconds)
+        } else {
+            format!("{} ms", milliseconds)
+        };
+
+        let rate = if bps > 1_000_000_000.0 {
+            let rate = bps/1_000_000_000.0;
+            format!("{:.2} Gbps", rate)
+        } else if bps > 1_000_000.0 {
+            let rate = bps/1_000_000.0;
+            format!("{:.2} Mbps", rate)
+        } else if bps > 1_000.0 {
+            let rate = bps/1_000.0;
+            format!("{:.2} Kbps", rate)
+        } else {
+            let rate = bps;
+            format!("{:.2} bps", rate)
+        };
+
+        Stats{
+            messages,
+            total_message_size: bytes,
+            total_time,
+            rate,
+        }
+    }
+}
+
+impl Display for Stats{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\tmessages: {}\n\ttotal message size: {}\n\ttotal time: {}\n\trate: {}", self.messages, self.total_message_size, self.total_time, self.rate)
+    }
+}

@@ -22,7 +22,6 @@ async fn main() {
     let server = server::server::Server::new(address, args.server_port);
     info!("initiator address: {}", initiator_address);
     let mut initiator = initiator::initiator::Initiator::new(initiator_address);
-
     let res = tokio::join!(
         server.run(),
         initiator.run(),
@@ -32,6 +31,4 @@ async fn main() {
         (Err(e), _) => eprintln!("server error: {}", e),
         (_, Err(e)) => eprintln!("initiator error: {}", e),
     }
-
-
 }

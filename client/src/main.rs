@@ -40,12 +40,12 @@ impl Into<SendRequest> for Args {
             Mtu::Mtu1024
         };
         let message_size = if let Some(message_size) = self.message_size{
-            Byte::parse_str(&message_size, true).unwrap().as_u64() as u32
+            Byte::parse_str(&message_size, true).unwrap().as_u64()
         } else {
             8
         };
         let volume = if let Some(volume) = self.volume{
-            let volume = Byte::parse_str(&volume, true).unwrap().as_u64() as u32;
+            let volume = Byte::parse_str(&volume, true).unwrap().as_u64();
             if volume % message_size != 0 {
                 panic!("volume must be a multiple of message size")
             }

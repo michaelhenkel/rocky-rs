@@ -5,10 +5,10 @@ pub struct ConnectRequest {
     pub id: u32,
     #[prost(uint32, tag = "2")]
     pub iterations: u32,
-    #[prost(uint32, tag = "3")]
-    pub message_size: u32,
-    #[prost(uint32, tag = "4")]
-    pub volume: u32,
+    #[prost(uint64, tag = "3")]
+    pub message_size: u64,
+    #[prost(uint64, tag = "4")]
+    pub volume: u64,
     #[prost(uint32, tag = "5")]
     pub mtu: u32,
 }
