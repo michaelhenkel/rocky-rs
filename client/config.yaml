@@ -1,15 +1,32 @@
 ---
 - job: job1
   phases:
-    - name: phase1
-      operations:
-        - server: 10.1.1.1
-          initiator: 10.1.1.2
-          server_port: 7777
-          initiator_port: 7776
-          message_size: 4MB
-          volume: 2000MB
-          iterations: 2
-          mtu: Mtu4096
-          op: Send
-#/client --server 10.1.1.1 --initiator 10.1.1.2 --server-port 7777 --initiator-port 7776 --message-size 4MB --volume 2000MB -n 2 --mtu 4096 send
+  - name: phase1
+    operations:
+    - server: 10.1.1.1
+      initiator: 10.1.1.2
+      server_port: 7777
+      initiator_port: 7776
+      message_size: 4MB
+      volume: 2000MB
+      iterations: 2
+      mtu: Mtu4096
+      op: Send
+    - server: 10.1.1.2
+      initiator: 10.1.1.3
+      server_port: 7777
+      initiator_port: 7776
+      message_size: 4MB
+      volume: 2000MB
+      iterations: 2
+      mtu: Mtu4096
+      op: Send
+    - server: 10.1.1.3
+      initiator: 10.1.1.1
+      server_port: 7777
+      initiator_port: 7776
+      message_size: 4MB
+      volume: 2000MB
+      iterations: 2
+      mtu: Mtu4096
+      op: Send

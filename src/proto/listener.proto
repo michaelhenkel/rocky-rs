@@ -22,6 +22,8 @@ message SendReply {
 enum Operation {
   SEND = 0;
   SEND_WITH_IMM = 1;
+  WRITE = 2;
+  WRITE_WITH_IMM = 3;
 }
 
 enum Mtu {

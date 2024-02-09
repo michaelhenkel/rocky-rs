@@ -25,6 +25,8 @@ pub struct SendReply {
 pub enum Operation {
     Send = 0,
     SendWithImm = 1,
+    Write = 2,
+    WriteWithImm = 3,
 }
 impl Operation {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -35,6 +37,8 @@ impl Operation {
         match self {
             Operation::Send => "SEND",
             Operation::SendWithImm => "SEND_WITH_IMM",
+            Operation::Write => "WRITE",
+            Operation::WriteWithImm => "WRITE_WITH_IMM",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -42,6 +46,8 @@ impl Operation {
         match value {
             "SEND" => Some(Self::Send),
             "SEND_WITH_IMM" => Some(Self::SendWithImm),
+            "WRITE" => Some(Self::Write),
+            "WRITE_WITH_IMM" => Some(Self::WriteWithImm),
             _ => None,
         }
     }

@@ -11,34 +11,6 @@ use clap::Parser;
 use config::config::load_config;
 pub mod config;
 
-#[derive(Parser, Debug)]
-struct BArgs{
-    #[clap(short, long)]
-    server: String,
-    #[clap(short, long)]
-    initiator: String,
-    #[clap(short, long)]
-    server_port: u16,
-    #[clap(short, long)]
-    initiator_port: u16,
-    #[clap(value_enum)]
-    op: ClientOperation,
-    #[clap(short, long)]
-    message_size: Option<String>,
-    #[clap(short, long)]
-    volume: Option<String>,
-    #[clap(short='n' , long)]
-    iterations: Option<u32>,
-    #[clap(short, long)]
-    mtu: Option<MtuSize>,
-}
-
-#[derive(Parser, Debug)]
-struct Args{
-    #[clap(short, long)]
-    cli_config: CliConfig
-}
-
 #[derive(Parser, Debug, Clone)]
 pub enum CliConfig{
     CliArgs(CliArgs),
@@ -122,6 +94,8 @@ impl Into<SendRequest> for CliArgs {
 enum ClientOperation{
     Send,
     SendWithImm,
+    Write,
+    WriteWithImm,
 }
 
 impl FromStr for ClientOperation {
@@ -130,6 +104,8 @@ impl FromStr for ClientOperation {
         match s {
             "send" => Ok(ClientOperation::Send),
             "send_with_imm" => Ok(ClientOperation::SendWithImm),
+            "write" => Ok(ClientOperation::Write),
+            "write_with_imm" => Ok(ClientOperation::WriteWithImm),
             _ => Err("invalid operation".to_string()),
         }
     }
@@ -140,6 +116,8 @@ impl From<ClientOperation> for Operation {
         match op {
             ClientOperation::Send => Operation::Send,
             ClientOperation::SendWithImm => Operation::SendWithImm,
+            ClientOperation::Write => Operation::Write,
+            ClientOperation::WriteWithImm => Operation::WriteWithImm,
         }
     }
 }
