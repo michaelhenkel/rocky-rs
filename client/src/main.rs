@@ -6,12 +6,13 @@ use rocky_rs::listener::listener::{
     SendRequest,
     Mtu,
 };
+use serde::{Deserialize, Serialize};
 use clap::Parser;
+use config::config::load_config;
+pub mod config;
 
 #[derive(Parser, Debug)]
-struct Args{
-    #[clap(short, long)]
-    id: u32,
+struct BArgs{
     #[clap(short, long)]
     server: String,
     #[clap(short, long)]
@@ -32,7 +33,59 @@ struct Args{
     mtu: Option<MtuSize>,
 }
 
-impl Into<SendRequest> for Args {
+#[derive(Parser, Debug)]
+struct Args{
+    #[clap(short, long)]
+    cli_config: CliConfig
+}
+
+#[derive(Parser, Debug, Clone)]
+pub enum CliConfig{
+    CliArgs(CliArgs),
+    ConfigArgs(ConfigArgs),
+}
+
+impl FromStr for CliConfig {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.ends_with(".yaml") {
+            Ok(CliConfig::ConfigArgs(ConfigArgs{path: s.to_string()}))
+        } else {
+            Ok(CliConfig::CliArgs(CliArgs::parse_from(s.split_whitespace())))
+        }
+    }
+}
+
+#[derive(Parser, Debug, Clone, Serialize, Deserialize)]
+pub struct CliArgs{
+    #[clap(short, long)]
+    server: Option<String>,
+    #[clap(short, long)]
+    initiator: Option<String>,
+    #[clap(short, long)]
+    server_port: Option<u16>,
+    #[clap(short, long)]
+    initiator_port: Option<u16>,
+    #[clap(value_enum)]
+    op: Option<ClientOperation>,
+    #[clap(short, long)]
+    message_size: Option<String>,
+    #[clap(short, long)]
+    volume: Option<String>,
+    #[clap(short='n' , long)]
+    iterations: Option<u32>,
+    #[clap(short, long)]
+    mtu: Option<MtuSize>,
+    #[clap(short, long)]
+    config: Option<String>,
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct ConfigArgs{
+    path: String,
+}
+
+impl Into<SendRequest> for CliArgs {
     fn into(self) -> SendRequest {
         let mtu = if let Some(mtu) = self.mtu{
             Mtu::from(mtu).into()
@@ -55,9 +108,8 @@ impl Into<SendRequest> for Args {
         };
         let iterations = self.iterations.unwrap_or(1);
         SendRequest{
-            id: self.id,
-            address: format!("{}:{}", self.server, self.server_port),
-            op: Operation::from(self.op).into(),
+            address: format!("{}:{}", self.server.unwrap(), self.server_port.unwrap()),
+            op: Operation::from(self.op.unwrap()).into(),
             message_size,
             volume,
             iterations,
@@ -66,7 +118,7 @@ impl Into<SendRequest> for Args {
     }
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, Serialize, Deserialize)]
 enum ClientOperation{
     Send,
     SendWithImm,
@@ -92,7 +144,7 @@ impl From<ClientOperation> for Operation {
     }
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, Serialize, Deserialize)]
 enum MtuSize{
     Mtu512,
     Mtu1024,
@@ -125,12 +177,30 @@ impl From<MtuSize> for Mtu {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
-    let initiator_address = format!("http://{}:{}",args.initiator, args.initiator_port);
+async fn main() -> anyhow::Result<()> {
+    let args = CliArgs::parse();
+    if let Some(config) = args.config{
+        let config = load_config(&config);
+        for job in config{
+            for phase in job.phases{
+                for operation in phase.operations{
+                    let request: SendRequest = operation.clone().into();
+                    send(request, operation.initiator.unwrap(), operation.initiator_port.unwrap()).await?;
+                }
+            }
+        }
+    } else {
+        let request: SendRequest = args.clone().into();
+        send(request, args.initiator.unwrap(), args.initiator_port.unwrap()).await?;
+    }
+    Ok(())
+}
+
+async fn send(request: SendRequest, initiator_address: String, initiator_port: u16) -> anyhow::Result<()> {
+    let initiator_address = format!("http://{}:{}",initiator_address, initiator_port);
     let mut client = ListenerClient::connect(initiator_address).await?;
-    let request = tonic::Request::new(args.into());
+    let request = tonic::Request::new(request);
     let response = client.send(request).await?;
-    println!("RESPONSE={:?}", response);
+    println!("{}", response.get_ref().uuid);
     Ok(())
 }

@@ -1,9 +1,7 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendRequest {
-    #[prost(uint32, tag = "1")]
-    pub id: u32,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag = "1")]
     pub address: ::prost::alloc::string::String,
     #[prost(enumeration = "Operation", tag = "3")]
     pub op: i32,
@@ -20,7 +18,7 @@ pub struct SendRequest {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendReply {
     #[prost(string, tag = "1")]
-    pub message: ::prost::alloc::string::String,
+    pub uuid: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

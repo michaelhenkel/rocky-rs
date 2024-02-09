@@ -7,8 +7,7 @@ service Listener {
 }
 
 message SendRequest {
-  uint32 id = 1;
-  string address = 2;
+  string address = 1;
   Operation op = 3;
   uint32 iterations = 4;
   uint64 messageSize = 5;
@@ -17,7 +16,7 @@ message SendRequest {
 }
 
 message SendReply {
-  string message = 1;
+  string uuid = 1;
 }
 
 enum Operation {

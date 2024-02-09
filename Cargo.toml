@@ -8,18 +8,31 @@ edition = "2021"
 [lib]
 path = "src/initiator/lib.rs"
 
+[[bin]]
+name = "rocky-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "rocky-client"
+path = "client/src/main.rs"
+
+
 [dependencies]
 anyhow = "1.0.79"
 async-rdma = { git = "ttps://github.com/datenlord/async-rdma.git" , features = ["cm"] }
+byte-unit = "5.1.4"
 clap = { version = "4.4.18", features = ["derive"] }
 env_logger = "0.11.1"
+futures = "0.3.30"
 log = "0.4.20"
 portpicker = "0.1.1"
 prost = "0.12.3"
 serde = { version = "1.0.196", features = ["derive", "serde_derive"] }
+serde_yaml = "0.9.31"
 tokio = { version = "=1.29.1", features = ["full"] }
 tonic = "0.10.2"
 tracing-subscriber = "0.3.18"
+uuid = { version = "1.7.0", features = ["v4"] }
 
 [build-dependencies]
 tonic-build = "0.10.2"

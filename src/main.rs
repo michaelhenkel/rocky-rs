@@ -22,6 +22,23 @@ async fn main() {
     let server = server::server::Server::new(address, args.server_port);
     info!("initiator address: {}", initiator_address);
     let mut initiator = initiator::initiator::Initiator::new(initiator_address);
+
+    let mut jh_list = Vec::new();
+
+    let jh = tokio::spawn(async move {
+        server.run().await
+    });
+
+    jh_list.push(jh);
+
+    let jh = tokio::spawn(async move {
+        initiator.run().await
+    });
+    jh_list.push(jh);
+
+    futures::future::join_all(jh_list).await;
+
+    /*
     let res = tokio::join!(
         server.run(),
         initiator.run(),
@@ -31,4 +48,5 @@ async fn main() {
         (Err(e), _) => eprintln!("server error: {}", e),
         (_, Err(e)) => eprintln!("initiator error: {}", e),
     }
+    */
 }

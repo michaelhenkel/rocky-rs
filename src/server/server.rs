@@ -19,7 +19,8 @@ impl Connection for Server {
         &self,
         request: tonic::Request<ConnectRequest>,
     ) -> Result<tonic::Response<ConnectReply>, tonic::Status> {
-        info!("init request from {}", request.get_ref().id);
+        info!("init request {}", request.get_ref().uuid);
+        let uuid = request.get_ref().uuid.clone();
         let port = portpicker::pick_unused_port().unwrap();
         let address = self.address.clone();
         let iterations = request.get_ref().iterations;
@@ -28,7 +29,7 @@ impl Connection for Server {
         let volume = request.get_ref().volume;
         info!("spawning listener at {}:{}", address, port);
         tokio::spawn(async move{
-            listener(address, port, iterations, message_size, volume, mtu).await
+            listener(address, port, iterations, message_size, volume, mtu, uuid).await
         });
         let reply = ConnectReply{
             port: port as u32,
@@ -45,15 +46,6 @@ impl Server {
         }
     }
     pub async fn run(self) -> anyhow::Result<()> {
-        let res = tokio::join!(
-            self.grpc_server(),
-        );
-        match res {
-            (Ok(res),) => Ok(res),
-            (Err(e),) => Err(e),
-        }
-    }
-    async fn grpc_server(self) -> anyhow::Result<()> {
         let address = format!("{}:{}", self.address, self.port);
         info!("starting grpc server at {}", address);
         let addr = address.parse().unwrap();
@@ -67,7 +59,7 @@ impl Server {
 
 }
 
-async fn listener(address: String, port: u16, iterations: u32, message_size: u64, volume: u64, mtu: u32) -> anyhow::Result<()> {
+async fn listener(address: String, port: u16, iterations: u32, message_size: u64, volume: u64, mtu: u32, uuid: String) -> anyhow::Result<()> {
     let address = format!("{}:{}", address, port);
     let mtu = match mtu {
         512 => MTU::MTU512,
@@ -76,7 +68,7 @@ async fn listener(address: String, port: u16, iterations: u32, message_size: u64
         4096 => MTU::MTU4096,
         _ => MTU::MTU1024,
     };
-    info!("listening for rdma at {}", address);
+    info!("listening for rdma at {} for request {}", address, uuid);
     info!("expecting {} iterations with size {}", iterations, message_size);
     let mut stats_map = StatsMap::new();
     let mut rdma = RdmaBuilder::default().
@@ -84,8 +76,6 @@ async fn listener(address: String, port: u16, iterations: u32, message_size: u64
     set_mtu(mtu).
     listen(address.clone()).await?;
     let receives = volume/message_size;
-
-    
     for it in 0..iterations{
         let mut total_message_size: u64 = 0;
         let mut message_count = 0;
@@ -110,7 +100,8 @@ async fn listener(address: String, port: u16, iterations: u32, message_size: u64
                 }
             }
         }
-        let stats = Stats::new(total_message_size, message_count, start);
+        info!("done with iteration {} for request {}", it, uuid);
+        let stats = Stats::new(total_message_size, message_count, start, uuid.clone());
         stats_map.push(it, stats);
     }
     info!("\n{}", stats_map);

@@ -496,11 +496,15 @@ checksum = "702fc72eb24e5a1e48ce58027a675bc24edd52096d5397d4aea7c6dd9eca0bd1"
 name = "client"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "byte-unit",
  "clap 4.4.18",
  "rocky-rs",
+ "serde",
+ "serde_yaml",
  "tokio",
  "tonic",
+ "uuid",
 ]
 
 [[package]]
@@ -1611,16 +1615,20 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-rdma",
+ "byte-unit",
  "clap 4.4.18",
  "env_logger 0.11.1",
+ "futures",
  "log",
  "portpicker",
  "prost",
  "serde",
+ "serde_yaml",
  "tokio",
  "tonic",
  "tonic-build",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -1729,6 +1737,19 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serde_yaml"
+version = "0.9.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adf8a49373e98a4c5f0ceb5d05aa7c648d75f63774981ed95b7c7443bbd50c6e"
+dependencies = [
+ "indexmap 2.2.2",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
 ]
 
 [[package]]
@@ -2168,6 +2189,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e51733f11c9c4f72aa0c160008246859e340b00807569a0da0e7a1079b27ba85"
 
 [[package]]
+name = "unsafe-libyaml"
+version = "0.2.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab4c90930b95a82d00dc9e9ac071b4991924390d46cbd0dfe566148667605e4b"
+
+[[package]]
 name = "utf8-width"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2184,6 +2211,9 @@ name = "uuid"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
+dependencies = [
+ "getrandom",
+]
 
 [[package]]
 name = "valuable"

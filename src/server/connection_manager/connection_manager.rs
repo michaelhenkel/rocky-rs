@@ -1,8 +1,8 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConnectRequest {
-    #[prost(uint32, tag = "1")]
-    pub id: u32,
+    #[prost(string, tag = "1")]
+    pub uuid: ::prost::alloc::string::String,
     #[prost(uint32, tag = "2")]
     pub iterations: u32,
     #[prost(uint64, tag = "3")]

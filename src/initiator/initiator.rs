@@ -35,7 +35,7 @@ impl Initiator {
     }
 }
 
-pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
+pub async fn initiate(request: SendRequest, uuid: String) -> anyhow::Result<()> {
     let init_address = format!("http://{}",request.address.clone());
     info!("connecting to server at {}", init_address);
     let mtu: Mtu = Mtu::try_from(request.mtu).unwrap();
@@ -47,7 +47,7 @@ pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
     };
     let mut init_client = ConnectionClient::connect(init_address).await?;
     let connect_request = tonic::Request::new(ConnectRequest{
-        id: request.id,
+        uuid: uuid.to_string(),
         iterations: request.iterations,
         message_size: request.message_size,
         volume: request.volume,
@@ -57,23 +57,22 @@ pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
     let port = response.get_ref().port;
     let address = request.address.split(":").next().unwrap();
     let server_address = format!("{}:{}", address, port);
-    info!("connecting to server at {}", server_address);
+    info!("connecting to server at {} for request {}", server_address, uuid);
     let op = Operation::try_from(request.op).unwrap();
-    tokio::task::spawn(async move{
+    //tokio::task::spawn(async move{
         let mut stats_map = StatsMap::new();
-        info!("sending {} iterations with size {}", request.iterations, request.message_size);
+        info!("sending {} iterations with size {} for request {}", request.iterations, request.message_size, uuid);
         let mut rdma = RdmaBuilder::default().
         set_max_message_length(request.message_size as usize).
         set_mtu(mtu_2).
         connect(server_address.clone()).await.unwrap();
         for it in 0..request.iterations{
-            
             let mut message_count = 0;
             let mut total_message_size: u64 = 0;
             let sends = request.volume/request.message_size;
             
             rdma = rdma.new_connect(server_address.clone()).await.unwrap();
-            info!("allocating {} bytes", request.message_size as usize);
+            info!("allocating {} bytes for request {}", request.message_size as usize, uuid.clone());
             let layout = Layout::from_size_align(request.message_size as usize, 1).unwrap();
             let mut lmr = match rdma.alloc_local_mr(layout){
                 Ok(lmr) => lmr,
@@ -103,18 +102,12 @@ pub async fn initiate(request: SendRequest) -> anyhow::Result<()> {
                     Err(e) => error!("operation error: {}", e),
                 }
             }
-            let stats = Stats::new(total_message_size, message_count, start);
+            let stats = Stats::new(total_message_size, message_count, start, uuid.clone());
             stats_map.push(it, stats);
-
-            /*
-            let ptr = lmr.as_mut_ptr();
-            unsafe { ptr.drop_in_place() };
-            drop(buf);
-            */
         }
         info!("\n{}", stats_map);
 
-    });
+    //});
 
     Ok(())
 }
@@ -142,15 +135,17 @@ impl Listener for Initiator {
         request: Request<SendRequest>,
     ) -> Result<Response<SendReply>, Status> {
         let request = request.into_inner();
-        
-        if let Err(e) = initiate(request).await{
-            error!("initiate error: {:?}", e);
-            return Err(Status::internal(e.to_string()));
-        }
-        
+        let uuid = uuid::Uuid::new_v4();
+        tokio::task::spawn(async move{
+            if let Err(e) = initiate(request, uuid.to_string()).await{
+                error!("initiate error: {:?}", e);
+                return Err(Status::internal(e.to_string()));
+            }
+            Ok(())
+        });
 
         let reply = SendReply{
-            message: "all good".to_string(),
+            uuid: uuid.to_string(),
         };
 
         Ok(Response::new(reply))
@@ -186,10 +181,11 @@ pub struct Stats{
     pub total_message_size: u64,
     pub total_time: String,
     pub rate: String,
+    pub uuid: String,
 }
 
 impl Stats{
-    pub fn new(total_message_size: u64, messages: u32, start: tokio::time::Instant) -> Stats{
+    pub fn new(total_message_size: u64, messages: u32, start: tokio::time::Instant, uuid: String) -> Stats{
         let bytes = total_message_size;
         let bits = (bytes*8) as f64;
         let seconds = start.elapsed().as_secs_f64();
@@ -228,12 +224,13 @@ impl Stats{
             total_message_size: bytes,
             total_time,
             rate,
+            uuid,
         }
     }
 }
 
 impl Display for Stats{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "\tmessages: {}\n\ttotal message size: {}\n\ttotal time: {}\n\trate: {}", self.messages, self.total_message_size, self.total_time, self.rate)
+        write!(f, "\tuid: {}\n\tmessages: {}\n\ttotal message size: {}\n\ttotal time: {}\n\trate: {}",self.uuid, self.messages, self.total_message_size, self.total_time, self.rate)
     }
 }
