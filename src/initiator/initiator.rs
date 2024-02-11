@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use std::{alloc::Layout, io::Write};
-use async_rdma::{LocalMr, LocalMrWriteAccess, Rdma, RdmaBuilder, RemoteMr, MTU};
+use async_rdma::{LocalMrWriteAccess, MrAccess, RdmaBuilder, MTU};
 use log::{error, info};
 use tonic::{transport::Server, Request, Response, Status};
 use crate::initiator::listener::listener::listener_server::{Listener, ListenerServer};
@@ -9,7 +9,8 @@ use crate::initiator::listener::listener::{
 };
 use crate::server::connection_manager::connection_manager::{
     ConnectRequest,
-    connection_client::ConnectionClient
+    connection_client::ConnectionClient,
+    Operation as CmOperation,
 };
 
 #[derive(Debug, Default)]
@@ -45,13 +46,21 @@ pub async fn initiate(request: SendRequest, uuid: String) -> anyhow::Result<()> 
         Mtu::Mtu2048 => (2048, MTU::MTU2048),
         Mtu::Mtu4096 => (4096, MTU::MTU4096)
     };
+    let op = Operation::try_from(request.op).unwrap();
+    let cm_operation = match op {
+        Operation::Send => CmOperation::Send,
+        Operation::SendWithImm => CmOperation::SendWithImm,
+        Operation::Write => CmOperation::Write,
+        Operation::WriteWithImm => CmOperation::WriteWithImm,
+    };
     let mut init_client = ConnectionClient::connect(init_address).await?;
     let connect_request = tonic::Request::new(ConnectRequest{
         uuid: uuid.to_string(),
         iterations: request.iterations,
         message_size: request.message_size,
         volume: request.volume,
-        mtu
+        mtu,
+        operation: cm_operation.into(),
     });
     let response = init_client.init(connect_request).await?;
     let port = response.get_ref().port;
@@ -65,11 +74,13 @@ pub async fn initiate(request: SendRequest, uuid: String) -> anyhow::Result<()> 
     set_max_message_length(request.message_size as usize).
     set_mtu(mtu_2).
     connect(server_address.clone()).await.unwrap();
+
     for it in 0..request.iterations{
+
         let mut message_count = 0;
         let mut total_message_size: u64 = 0;
         let sends = request.volume/request.message_size;
-        
+
         rdma = rdma.new_connect(server_address.clone()).await.unwrap();
         info!("allocating {} bytes for request {}", request.message_size as usize, uuid.clone());
 
@@ -83,71 +94,36 @@ pub async fn initiate(request: SendRequest, uuid: String) -> anyhow::Result<()> 
         info!("allocation done, writing to memory");
         let buf = vec![1_u8; request.message_size as usize];
         let _num = lmr.as_mut_slice().write(buf.as_slice()).unwrap();
-
-        
-        let mut rmr = match op{
-            Operation::Write => {
-                let rmr = rdma.request_remote_mr(layout).await?;
-                Some(rmr)
-            },
-            Operation::WriteWithImm => {
-                let rmr = rdma.request_remote_mr(layout).await?;
-                Some(rmr)
-            },
-            _ => {
-                None
-            },
-        };
-
         let start = tokio::time::Instant::now();
         info!("writing done, sending message");
         for _ in 0..sends{
-            let res = match op{
+            match op{
                 Operation::Send => {
-                    send(&rdma, &lmr).await
+                    rdma.send(&lmr).await?;
                 },
                 Operation::SendWithImm => {
-                    send_with_imm(&rdma, &lmr).await
+                    rdma.send_with_imm(&lmr,1).await?;
                 },
                 Operation::Write => {
-                    write(&rdma, &lmr, rmr.as_mut().unwrap()).await
+                    let mut rmr = rdma.request_remote_mr(layout).await?;
+                    let mut x = rmr.get_mut(0..rmr.length())?;
+                    rdma.write(&lmr.get(0..lmr.length()).unwrap(), &mut x).await?;
+                    rdma.send_remote_mr(rmr).await?;
                 },
                 Operation::WriteWithImm => {
-                    write_with_imm(&rdma, &lmr, rmr.as_mut().unwrap()).await
+                    let mut rmr = rdma.request_remote_mr(layout).await?;
+                    let mut x = rmr.get_mut(0..rmr.length())?;
+                    rdma.write_with_imm(&lmr.get(0..lmr.length()).unwrap(), &mut x, 1).await?;
+                    rdma.send_remote_mr(rmr).await?;
                 },
-            };
-            match res {
-                Ok(_) => {
-                    message_count += 1;
-                    total_message_size += request.message_size;
-                },
-                Err(e) => error!("operation error: {}", e),
             }
+            total_message_size += request.message_size as u64;
+            message_count += 1;
         }
         let stats = Stats::new(total_message_size, message_count, start, uuid.clone());
         stats_map.push(it, stats);
     }
     info!("\n{}", stats_map);
-    Ok(())
-}
-
-pub async fn send(rdma: &Rdma, lmr: &LocalMr) -> anyhow::Result<()> {
-    rdma.send(&lmr).await?;
-    Ok(())
-}
-
-pub async fn send_with_imm(rdma: &Rdma, lmr: &LocalMr) -> anyhow::Result<()> {
-    rdma.send_with_imm(&lmr, 1_u32).await?;
-    Ok(())
-}
-
-pub async fn write(rdma: &Rdma, lmr: &LocalMr, rmr: &mut RemoteMr) -> anyhow::Result<()> {
-    rdma.write(lmr, rmr).await?;
-    Ok(())
-}
-
-async fn write_with_imm(rdma: &Rdma, lmr: &LocalMr, rmr: &mut RemoteMr) -> anyhow::Result<()> {
-    rdma.write_with_imm(lmr, rmr, 1_u32).await?;
     Ok(())
 }
 

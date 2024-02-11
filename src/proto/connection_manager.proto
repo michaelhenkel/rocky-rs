@@ -12,8 +12,16 @@ message ConnectRequest {
   uint64 message_size = 3;
   uint64 volume = 4;
   uint32 mtu = 5;
+  Operation operation = 6;
 }
 
 message ConnectReply {
   uint32 port = 1;
+}
+
+enum Operation {
+  SEND = 0;
+  SEND_WITH_IMM = 1;
+  WRITE = 2;
+  WRITE_WITH_IMM = 3;
 }

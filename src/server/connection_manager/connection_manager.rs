@@ -11,12 +11,46 @@ pub struct ConnectRequest {
     pub volume: u64,
     #[prost(uint32, tag = "5")]
     pub mtu: u32,
+    #[prost(enumeration = "Operation", tag = "6")]
+    pub operation: i32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConnectReply {
     #[prost(uint32, tag = "1")]
     pub port: u32,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum Operation {
+    Send = 0,
+    SendWithImm = 1,
+    Write = 2,
+    WriteWithImm = 3,
+}
+impl Operation {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Operation::Send => "SEND",
+            Operation::SendWithImm => "SEND_WITH_IMM",
+            Operation::Write => "WRITE",
+            Operation::WriteWithImm => "WRITE_WITH_IMM",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SEND" => Some(Self::Send),
+            "SEND_WITH_IMM" => Some(Self::SendWithImm),
+            "WRITE" => Some(Self::Write),
+            "WRITE_WITH_IMM" => Some(Self::WriteWithImm),
+            _ => None,
+        }
+    }
 }
 /// Generated client implementations.
 pub mod connection_client {

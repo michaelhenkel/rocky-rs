@@ -8,6 +8,8 @@ use log::{error, info};
 use portpicker;
 use crate::initiator::initiator::{Stats,StatsMap};
 
+use super::connection_manager::connection_manager::Operation;
+
 pub struct Server{
     address: String,
     port: u16,
@@ -27,9 +29,10 @@ impl Connection for Server {
         let message_size = request.get_ref().message_size;
         let mtu = request.get_ref().mtu;
         let volume = request.get_ref().volume;
+        let op = request.get_ref().operation();
         info!("spawning listener at {}:{}", address, port);
         tokio::spawn(async move{
-            listener(address, port, iterations, message_size, volume, mtu, uuid).await
+            listener(address, port, iterations, message_size, volume, mtu, uuid, op).await
         });
         let reply = ConnectReply{
             port: port as u32,
@@ -59,7 +62,7 @@ impl Server {
 
 }
 
-async fn listener(address: String, port: u16, iterations: u32, message_size: u64, volume: u64, mtu: u32, uuid: String) -> anyhow::Result<()> {
+async fn listener(address: String, port: u16, iterations: u32, message_size: u64, volume: u64, mtu: u32, uuid: String, op: Operation) -> anyhow::Result<()> {
     let address = format!("{}:{}", address, port);
     let mtu = match mtu {
         512 => MTU::MTU512,
@@ -68,6 +71,7 @@ async fn listener(address: String, port: u16, iterations: u32, message_size: u64
         4096 => MTU::MTU4096,
         _ => MTU::MTU1024,
     };
+ 
     info!("listening for rdma at {} for request {}", address, uuid);
     info!("expecting {} iterations with size {}", iterations, message_size);
     let mut stats_map = StatsMap::new();
@@ -82,12 +86,18 @@ async fn listener(address: String, port: u16, iterations: u32, message_size: u64
         rdma = rdma.listen().await?;
         let start = tokio::time::Instant::now();
         for _ in 0..receives{
-            let res = tokio::select! {
-                ret = receive(&rdma) => {
-                    ret
+            let res = match op{
+                Operation::Send => {
+                    receive(&rdma).await
                 },
-                ret = receive_with_imm(&rdma) => {
-                    ret
+                Operation::SendWithImm => {
+                    receive_with_imm(&rdma).await
+                },
+                Operation::Write => {
+                    receive_local_mr(&rdma).await
+                },
+                Operation::WriteWithImm => {
+                    receive_local_mr_with_imm(&rdma).await
                 },
             };
             match res {
@@ -117,6 +127,19 @@ pub async fn receive(rdma: &Rdma) -> anyhow::Result<usize> {
 
 pub async fn receive_with_imm(rdma: &Rdma) -> anyhow::Result<usize> {
     let (lmr, _imm) = rdma.receive_with_imm().await?;
+    let _data = *lmr.as_slice();
+    Ok(lmr.length())
+}
+
+pub async fn receive_local_mr(rdma: &Rdma) -> anyhow::Result<usize> {
+    let lmr = rdma.receive_local_mr().await?;
+    let _data = *lmr.as_slice();
+    Ok(lmr.length())
+}
+
+pub async fn receive_local_mr_with_imm(rdma: &Rdma) -> anyhow::Result<usize> {
+    let _imm = rdma.receive_write_imm().await?;
+    let lmr = rdma.receive_local_mr().await?;
     let _data = *lmr.as_slice();
     Ok(lmr.length())
 }
