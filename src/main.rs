@@ -13,10 +13,14 @@ use rocky_rs::connection_manager::connection_manager::{
     ServerReply,
 };
 use serde::Deserialize;
+
 use tonic::{transport::Server as GrpcServer,Request as GrpcRequest, Status};
 use log::{error, info};
 use tokio::process::Command;
+
+use std::process::Stdio;
 use regex::Regex;
+use port_scanner;
 
 #[derive(Parser, Debug)]
 struct Args{
@@ -56,15 +60,24 @@ impl ServerConnection for Rocky {
         let request = request.into_inner();
         let device = self.device.clone();
         let uuid = request.uuid.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move{
-            if let Err(e) = listen(request, device, port).await{
+            if let Err(e) = listen(request, device, port, tx).await{
                 error!("listen error: {:?}", e);
                 return Err(Status::internal(e.to_string()));
             }
             info!("server done with request {}", uuid.unwrap());
             Ok(())
         });
-        Ok(tonic::Response::new(reply))
+        match rx.await{
+            Ok(_) => {
+                Ok(tonic::Response::new(reply))
+            },
+            Err(e) => {
+                error!("rx error: {:?}", e);
+                return Err(Status::internal(e.to_string()));
+            }
+        }
     }
 }
 
@@ -163,34 +176,52 @@ pub fn request_to_cmd(request: Request, device_name: Option<String>, suffix: &st
     cmd
 }
 
-pub async fn listen(mut request: Request, device_name: Option<String>, port: u16) -> anyhow::Result<()> {
+pub async fn listen(mut request: Request, device_name: Option<String>, port: u16, tx: tokio::sync::oneshot::Sender<bool>) -> anyhow::Result<()> {
     info!("listening on port {}", port);
     request.server_port = port as u32;
     let mut cmd = request_to_cmd(request.clone(), device_name, "server");
-    info!("server cmd: {:?}", cmd);
-    cmd.output().await?;
-    let output = std::fs::read_to_string(format!("/tmp/{}-server.json", request.uuid.unwrap()))?;
-    let quoted_string = quote_strings(&output);
-    info!("quoted_string: {}", quoted_string);
-    let results: Report = serde_json::from_str(&quoted_string)?;
-    info!("results: {:#?}", results);
+    let mut child = cmd.
+        stdout(Stdio::piped()).
+        stderr(Stdio::piped()).
+        kill_on_drop(true).
+        spawn()?;
+
+    info!("waiting for port to be allocated");
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        if !port_scanner::local_port_available(port){
+            break;
+        }
+    }
+    info!("port {} is allocated", port);
+    tx.send(true).unwrap();
+
+    child.wait().await?;
     Ok(())
 }
 
 pub async fn initiate(mut request: Request, device: Option<String>) -> anyhow::Result<()> {
     let server_address = format!("http://{}:{}", request.server_address.clone(), request.server_port);
-    let mut server_client = ServerConnectionClient::connect(server_address).await?;
+    let mut server_client = ServerConnectionClient::connect(server_address.clone()).await?;
+    info!("initiating connection to server at {}", server_address);
     let grpc_request = GrpcRequest::new(request.clone());
     let server_reply = server_client.server(grpc_request).await?.into_inner();
+    info!("server reply: {:?}", server_reply);
     let port = server_reply.port;
     request.server_port = port as u32;
+    //tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     let mut cmd = request_to_cmd(request.clone(), device, "initiator");
-    cmd.arg(request.server_address);
-    info!("initiator cmd: {:?}", cmd);
-    cmd.output().await?;
-    let output = std::fs::read_to_string(format!("/tmp/{}-initiator.json", request.uuid.unwrap()))?;
+    cmd.arg(request.clone().server_address);
+    runner(cmd, "initiator", request.uuid()).await?;
+    Ok(())
+}
+
+pub async fn runner(mut command: Command, suffix: &str, uuid: &str) -> anyhow::Result<()>{
+    info!("running {} cmd: {:?}",suffix, command);
+    let out = command.output().await?;
+    info!("{} output: {:?}", suffix, out);
+    let output = std::fs::read_to_string(format!("/tmp/{}-{}.json",uuid, suffix))?;
     let quoted_string = quote_strings(&output);
-    info!("quoted_string: {}", quoted_string);
     let results: Report = serde_json::from_str(&quoted_string)?;
     info!("results: {:#?}", results);
     Ok(())
