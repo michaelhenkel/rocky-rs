@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-path = "src/initiator/lib.rs"
+path = "src/lib.rs"
 
 [[bin]]
 name = "rocky-server"
@@ -19,7 +19,8 @@ path = "client/src/main.rs"
 
 [dependencies]
 anyhow = "1.0.79"
-async-rdma = { git = "ttps://github.com/datenlord/async-rdma.git" , features = ["cm"] }
+#async-rdma = { git = "https://github.com/datenlord/async-rdma.git" , features = ["cm"] }
+async-rdma = { path = "../async-rdma" , features = ["cm"] }
 byte-unit = "5.1.4"
 clap = { version = "4.4.18", features = ["derive"] }
 env_logger = "0.11.1"
@@ -27,7 +28,9 @@ futures = "0.3.30"
 log = "0.4.20"
 portpicker = "0.1.1"
 prost = "0.12.3"
+regex = "1.10.3"
 serde = { version = "1.0.196", features = ["derive", "serde_derive"] }
+serde_json = "1.0.113"
 serde_yaml = "0.9.31"
 tokio = { version = "=1.29.1", features = ["full"] }
 tonic = "0.10.2"

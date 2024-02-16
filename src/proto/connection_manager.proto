@@ -2,26 +2,49 @@ syntax = "proto3";
 
 package connection_manager;
 
-service Connection {
-  rpc Init (ConnectRequest) returns (ConnectReply) {}
+service ServerConnection {
+  rpc Server (Request) returns (ServerReply) {}
 }
 
-message ConnectRequest {
-  string uuid = 1;
-  uint32 iterations = 2;
-  uint64 message_size = 3;
-  uint64 volume = 4;
-  uint32 mtu = 5;
-  Operation operation = 6;
+service InitiatorConnection {
+  rpc Initiator (Request) returns (InitiatorReply) {}
 }
 
-message ConnectReply {
+message ServerReply {
   uint32 port = 1;
+}
+
+message Request {
+  optional string uuid = 1;
+  string server_address = 2;
+  uint32 server_port = 3;
+  optional uint32 iterations = 4;
+  optional uint64 message_size = 5;
+  optional Mtu mtu = 6;
+  Operation operation = 7;
+  Mode mode = 8;
+  bool cm = 9;
+}
+
+enum Mtu {
+  MTU_512 = 0;
+  MTU_1024 = 1;
+  MTU_2048 = 2;
+  MTU_4096 = 3;
+}
+
+message InitiatorReply {
+  string uuid = 1;
 }
 
 enum Operation {
   SEND = 0;
-  SEND_WITH_IMM = 1;
-  WRITE = 2;
-  WRITE_WITH_IMM = 3;
+  WRITE = 1;
+  READ = 2;
+  ATOMIC = 3;
+}
+
+enum Mode {
+  BW = 0;
+  LAT = 1;
 }

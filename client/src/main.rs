@@ -1,10 +1,11 @@
 use std::str::FromStr;
 use byte_unit::Byte;
-use rocky_rs::listener::listener::{
-    listener_client::ListenerClient,
+use rocky_rs::connection_manager::connection_manager::{
+    initiator_connection_client::InitiatorConnectionClient,
     Operation,
-    SendRequest,
+    Request,
     Mtu,
+    Mode
 };
 use serde::{Deserialize, Serialize};
 use clap::Parser;
@@ -39,7 +40,9 @@ pub struct CliArgs{
     #[clap(short, long)]
     initiator_port: Option<u16>,
     #[clap(value_enum)]
-    op: Option<ClientOperation>,
+    op: ClientOperation,
+    #[clap(value_enum)]
+    mode: ClientMode,
     #[clap(short, long)]
     message_size: Option<String>,
     #[clap(short, long)]
@@ -50,6 +53,8 @@ pub struct CliArgs{
     mtu: Option<MtuSize>,
     #[clap(short, long)]
     config: Option<String>,
+    #[clap(short, long)]
+    cm: Option<bool>,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -57,35 +62,33 @@ pub struct ConfigArgs{
     path: String,
 }
 
-impl Into<SendRequest> for CliArgs {
-    fn into(self) -> SendRequest {
+impl Into<Request> for CliArgs {
+    fn into(self) -> Request {
         let mtu = if let Some(mtu) = self.mtu{
-            Mtu::from(mtu).into()
+            Some(Mtu::from(mtu).into())
         } else {
-            Mtu::Mtu1024
+            None
         };
         let message_size = if let Some(message_size) = self.message_size{
-            Byte::parse_str(&message_size, true).unwrap().as_u64()
+            Some(Byte::parse_str(&message_size, true).unwrap().as_u64())
         } else {
-            8
+            None
         };
-        let volume = if let Some(volume) = self.volume{
-            let volume = Byte::parse_str(&volume, true).unwrap().as_u64();
-            if volume % message_size != 0 {
-                panic!("volume must be a multiple of message size")
-            }
-            volume
-        } else {
-            message_size
-        };
-        let iterations = self.iterations.unwrap_or(1);
-        SendRequest{
-            address: format!("{}:{}", self.server.unwrap(), self.server_port.unwrap()),
-            op: Operation::from(self.op.unwrap()).into(),
+        
+
+        let operation: Operation = self.op.into();
+        let mode: Mode = self.mode.into();
+        
+        Request{
+            server_address: self.server.unwrap(),
+            server_port: self.server_port.unwrap() as u32,
+            uuid: None,
+            iterations: self.iterations,
             message_size,
-            volume,
-            iterations,
-            mtu: mtu.into(),
+            mtu,
+            operation: operation.into(),
+            mode: mode.into(),
+            cm: self.cm.unwrap_or(false),
         }
     }
 }
@@ -93,9 +96,9 @@ impl Into<SendRequest> for CliArgs {
 #[derive(Parser, Debug, Clone, Serialize, Deserialize)]
 enum ClientOperation{
     Send,
-    SendWithImm,
+    Read,
     Write,
-    WriteWithImm,
+    Atomic,
 }
 
 impl FromStr for ClientOperation {
@@ -103,9 +106,9 @@ impl FromStr for ClientOperation {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "send" => Ok(ClientOperation::Send),
-            "send_with_imm" => Ok(ClientOperation::SendWithImm),
+            "read" => Ok(ClientOperation::Read),
             "write" => Ok(ClientOperation::Write),
-            "write_with_imm" => Ok(ClientOperation::WriteWithImm),
+            "atomic" => Ok(ClientOperation::Atomic),
             _ => Err("invalid operation".to_string()),
         }
     }
@@ -115,9 +118,35 @@ impl From<ClientOperation> for Operation {
     fn from(op: ClientOperation) -> Self {
         match op {
             ClientOperation::Send => Operation::Send,
-            ClientOperation::SendWithImm => Operation::SendWithImm,
+            ClientOperation::Read => Operation::Read,
             ClientOperation::Write => Operation::Write,
-            ClientOperation::WriteWithImm => Operation::WriteWithImm,
+            ClientOperation::Atomic => Operation::Atomic,
+        }
+    }
+}
+
+#[derive(Parser, Debug, Clone, Serialize, Deserialize)]
+enum ClientMode{
+    Bw,
+    Lat,
+}
+
+impl FromStr for ClientMode {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "bw" => Ok(ClientMode::Bw),
+            "lat" => Ok(ClientMode::Lat),
+            _ => Err("invalid mode".to_string()),
+        }
+    }
+}
+
+impl From<ClientMode> for Mode {
+    fn from(mode: ClientMode) -> Self {
+        match mode {
+            ClientMode::Bw => Mode::Bw,
+            ClientMode::Lat => Mode::Lat,
         }
     }
 }
@@ -162,23 +191,23 @@ async fn main() -> anyhow::Result<()> {
         for job in config{
             for phase in job.phases{
                 for operation in phase.operations{
-                    let request: SendRequest = operation.clone().into();
+                    let request: Request = operation.clone().into();
                     send(request, operation.initiator.unwrap(), operation.initiator_port.unwrap()).await?;
                 }
             }
         }
     } else {
-        let request: SendRequest = args.clone().into();
+        let request: Request = args.clone().into();
         send(request, args.initiator.unwrap(), args.initiator_port.unwrap()).await?;
     }
     Ok(())
 }
 
-async fn send(request: SendRequest, initiator_address: String, initiator_port: u16) -> anyhow::Result<()> {
+async fn send(request: Request, initiator_address: String, initiator_port: u16) -> anyhow::Result<()> {
     let initiator_address = format!("http://{}:{}",initiator_address, initiator_port);
-    let mut client = ListenerClient::connect(initiator_address).await?;
+    let mut client = InitiatorConnectionClient::connect(initiator_address).await?;
     let request = tonic::Request::new(request);
-    let response = client.send(request).await?;
+    let response = client.initiator(request).await?;
     println!("{}", response.get_ref().uuid);
     Ok(())
 }
