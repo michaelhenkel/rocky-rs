@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
      rdma-core \
      libibverbs-dev \
      iproute2 \
-     bash
+     infiniband-diags
 
 COPY target/release/rocky-server /rocky-server
 COPY target/release/rocky-client /rocky-client
