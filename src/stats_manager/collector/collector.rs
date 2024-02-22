@@ -1,3 +1,4 @@
+use std::process::Command;
 use std::{collections::HashMap, sync::Arc};
 use log::{error, info};
 use tokio::sync::RwLock;
@@ -16,9 +17,10 @@ pub struct Collector{
     monitor_client: Option<Client>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Interface{
     name: String,
+    linux_name: String,
     ports: Vec<String>,
 }
 
@@ -104,12 +106,29 @@ struct Counters{
 
 impl Interface{
     pub fn new(name: String) -> Interface{
-        let ports = std::fs::read_dir(format!("/sys/class/infiniband/{}/ports", name)).unwrap()
-            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-            .collect();
-        Interface{
-            name,
-            ports,
+        let ports: Vec<String> = std::fs::read_dir(format!("/sys/class/infiniband/{}/ports", name)).unwrap()
+            .map(|entry| { entry.unwrap().file_name().into_string().unwrap() })
+            .collect();        
+        if ports.len() > 0 {
+            let command = Command::new("rdma").
+                arg("link").
+                arg("show").
+                arg(format!("{}/{}",name, ports[0])).
+                output().unwrap();
+            let output = String::from_utf8_lossy(&command.stdout);
+            let parts: Vec<&str> = output.split(" ").collect();
+            let linux_name = parts[parts.len() - 2].to_string();
+            Interface{
+                name,
+                linux_name,
+                ports,
+            }
+        } else {
+            Interface{
+                name,
+                linux_name: "".to_string(),
+                ports,
+            }
         }
     }
 }
@@ -280,6 +299,7 @@ async fn count(freq: u64, interfaces: Vec<Interface>, tx: tokio::sync::mpsc::Sen
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(freq));
     let secs: f64 = freq as f64 / 1000 as f64;
     let mut history: HashMap<String,u64> = HashMap::new();
+    info!("interfaces: {:?}", interfaces);
     loop{
         interval.tick().await;
         for interface in &interfaces{
@@ -297,10 +317,20 @@ async fn count(freq: u64, interfaces: Vec<Interface>, tx: tokio::sync::mpsc::Sen
                     implied_nak_seq_errors: hw_counter_path(&interface.name, port, "implied_nak_seq_err"),
                     duplicate_request: hw_counter_path(&interface.name, port, "duplicate_request")
                 };
-                let port_rcv_data = counter_path(&interface.name, port, "port_rcv_data") / 4;
-                let port_xmit_data = counter_path(&interface.name, port, "port_xmit_data") / 4;
-                let port_rcv_packets = counter_path(&interface.name, port, "port_rcv_packets");
-                let port_xmit_packets = counter_path(&interface.name, port, "port_xmit_packets");
+                let (port_rcv_data, port_xmit_data, port_rcv_packets, port_xmit_packets) = if interface.name.contains("rxe"){
+                    let port_rcv_data = linux_counter_path(&interface.linux_name, "rx_bytes");
+                    let port_xmit_data = linux_counter_path(&interface.linux_name, "tx_bytes");
+                    let port_rcv_packets = linux_counter_path(&interface.linux_name, "rx_packets");
+                    let port_xmit_packets = linux_counter_path(&interface.linux_name, "tx_packets");
+                    (port_rcv_data, port_xmit_data, port_rcv_packets, port_xmit_packets)
+                } else {
+                    let port_rcv_data = counter_path(&interface.name, port, "port_rcv_data") / 4;
+                    let port_xmit_data = counter_path(&interface.name, port, "port_xmit_data") / 4;
+                    let port_rcv_packets = counter_path(&interface.name, port, "port_rcv_packets");
+                    let port_xmit_packets = counter_path(&interface.name, port, "port_xmit_packets");
+                    (port_rcv_data, port_xmit_data, port_rcv_packets, port_xmit_packets)
+                };
+
                 let port_counters = PortCounters{
                     unicast_xmit_packets: counter_path(&interface.name, port, "unicast_xmit_packets"),
                     unicast_rcv_packets: counter_path(&interface.name, port, "unicast_rcv_packets"),
@@ -349,7 +379,7 @@ async fn count(freq: u64, interfaces: Vec<Interface>, tx: tokio::sync::mpsc::Sen
 
                 let counters = Counters{
                     interface: interface.name.clone(),
-                    port: port.clone(),
+                    port: port.to_string(),
                     port_counters,
                     hw_counters,
                     per_sec_counters: per_sec_counter,
@@ -365,6 +395,23 @@ async fn count(freq: u64, interfaces: Vec<Interface>, tx: tokio::sync::mpsc::Sen
 fn counter_path(interface: &str, port: &str, counter_type: &str) -> u64
 {
     let p = format!("/sys/class/infiniband/{}/ports/{}/counters/{}", interface, port, counter_type);
+    let v = match std::fs::read_to_string(p){
+        Ok(v) => v,
+        Err(_e) => {
+            return 0;
+        }
+    };
+    match v.trim().parse::<u64>(){
+        Ok(v) => v,
+        Err(_e) => {
+            0
+        }
+    }
+}
+
+fn linux_counter_path(interface: &str, counter_type: &str) -> u64
+{
+    let p = format!("/sys/class/net/{}/statistics/{}", interface, counter_type);
     let v = match std::fs::read_to_string(p){
         Ok(v) => v,
         Err(_e) => {
