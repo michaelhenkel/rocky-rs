@@ -16,31 +16,40 @@ path = "src/main.rs"
 name = "rocky-client"
 path = "client/src/main.rs"
 
+[[bin]]
+name = "rocky-monitor"
+path = "monitor/src/main.rs"
+
 
 [dependencies]
+actix-web = "4.5.1"
+actix-web-prom = "0.8.0"
 anyhow = "1.0.79"
-#async-rdma = { git = "https://github.com/datenlord/async-rdma.git" , features = ["cm"] }
-async-rdma = { path = "../async-rdma" , features = ["cm"] }
 byte-unit = "5.1.4"
 clap = { version = "4.4.18", features = ["derive"] }
 crossterm = "0.27.0"
+cursive = "0.20.0"
 env_logger = "0.11.1"
 futures = "0.3.30"
 log = "0.4.20"
 port_scanner = "0.1.5"
 portpicker = "0.1.1"
+prometheus = "0.13.3"
 prost = "0.12.3"
 regex = "1.10.3"
 serde = { version = "1.0.196", features = ["derive", "serde_derive"] }
 serde_json = "1.0.113"
 serde_yaml = "0.9.31"
 tempfile = "3.10.0"
-tokio = { version = "=1.29.1", features = ["full"] }
+tokio = { version = "1.36.0", features = ["full"] }
 tokio-stream = { version = "0.1.14", features = ["full"] }
 tokio-util = { version = "0.7.10", features = ["full"] }
-tonic = "0.10.2"
+tonic = "0.11.0"
 tracing-subscriber = "0.3.18"
 uuid = { version = "1.7.0", features = ["v4"] }
+monitor = { path = "monitor" }
+hostname = "0.3.1"
+gethostname = "0.4.3"
 
 [build-dependencies]
-tonic-build = "0.10.2"
+tonic-build = "0.11.0"

@@ -1,7 +1,8 @@
-use std::{collections::HashMap, fmt::Display, sync::{Arc, Mutex}};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 use crate::connection_manager::connection_manager::{
     Report as GrpcReport,
     TestInfo as GrpcTestInfo,
@@ -10,7 +11,7 @@ use crate::connection_manager::connection_manager::{
 
 pub struct StatsManager{
     client: Client,
-    rx: Arc<Mutex<tokio::sync::mpsc::Receiver<Command>>>
+    rx: Arc<RwLock<tokio::sync::mpsc::Receiver<Command>>>
 }
 
 impl StatsManager{
@@ -18,7 +19,7 @@ impl StatsManager{
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         StatsManager{
             client: Client::new(tx),
-            rx: Arc::new(Mutex::new(rx))
+            rx: Arc::new(RwLock::new(rx))
         }
     }
     pub fn client(&self) -> Client{
@@ -26,7 +27,7 @@ impl StatsManager{
     }
     pub async fn run(&self) -> anyhow::Result<()>{
         let rx = self.rx.clone();
-        let mut rx = rx.lock().unwrap();
+        let mut rx = rx.write().await;
         let mut stats_map = HashMap::new();
         loop {
             while let Some(command) = rx.recv().await{

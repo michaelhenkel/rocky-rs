@@ -1,0 +1,50 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+package monitor;
+
+service MonitorServer {
+  rpc SendStats (stream Stats) returns (ReceiveReply) {}
+}
+
+message Stats {
+    Meta meta = 1;
+    Data data = 2;
+}
+
+message Meta{
+    string hostname = 1;
+    string interface = 2;
+    string port = 3;
+}
+
+message Data{
+  uint64 unicast_xmit_packets = 1;
+  uint64 unicast_rcv_packets = 2;
+  uint64 port_xmit_wait = 3;
+  uint64 port_xmit_packets = 4;
+  uint64 port_xmit_data = 5;
+  uint64 port_rcv_packets = 6;
+  uint64 port_rcv_errors = 7;
+  uint64 port_rcv_data = 8;
+  uint64 multicast_xmit_packets = 9;
+  uint64 multicast_rcv_packets = 10;
+  uint64 rx_write_requests = 11;
+  uint64 rx_read_requests = 12;
+  uint64 rx_atomic_requests = 13;
+  uint64 resp_cqe_errors = 14;
+  uint64 req_cqe_errors = 15;
+  uint64 resp_cqe_fl = 16;
+  uint64 out_of_sequence = 17;
+  uint64 out_of_buffer = 18;
+  uint64 local_ack_timeout_errors = 19;
+  uint64 implied_nak_seq_errors = 20;
+  uint64 duplicate_request = 21;
+  double bytes_xmit_per_sec = 22;
+  double packets_xmit_per_sec = 23;
+  double bytes_rcv_per_sec = 24;
+  double packets_rcv_per_sec = 25;
+}
+
+message ReceiveReply {
+    string message = 1;
+}

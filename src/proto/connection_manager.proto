@@ -78,6 +78,7 @@ message Request {
   Operation operation = 7;
   Mode mode = 8;
   bool cm = 9;
+  optional uint32 duration = 10;
 }
 
 enum Mtu {

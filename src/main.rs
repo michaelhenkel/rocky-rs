@@ -1,5 +1,6 @@
 use clap::Parser;
-use rocky_rs::stats_manager::counter_monitor::counter_monitor::{CounterMonitor, CounterMonitorClient};
+use rocky_rs::monitor_client::monitor_client::MonitorClient;
+use rocky_rs::stats_manager::collector::collector::{Collector, CollectorClient};
 use tokio_stream::{wrappers::ReceiverStream, Stream};
 use rocky_rs::connection_manager::connection_manager::server_connection_client::ServerConnectionClient;
 use rocky_rs::connection_manager::connection_manager::{Mode, Mtu, Operation};
@@ -28,6 +29,7 @@ use std::process::Stdio;
 use port_scanner;
 use rocky_rs::stats_manager::stats_manager::{Client, StatsManager};
 
+
 type MonitorResult<T> = anyhow::Result<Response<T>, Status>;
 type ResponseStream = Pin<Box<dyn Stream<Item = Result<InterfaceCounter, Status>> + Send>>;
 
@@ -43,17 +45,43 @@ struct Args{
     device: Option<String>,
     #[arg(short, long)]
     frequency: Option<u64>,
+    #[arg(short, long)]
+    stats_server: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()>{
     env_logger::init();
     let args = Args::parse();
+    let mut jh_list = Vec::new();
+    let mut monitor_client_client = None;
+    if let Some(stats_server) = args.stats_server{
+        info!("starting monitor client with stats server: {}", stats_server);
+        let monitor_client = MonitorClient::new(stats_server);
+        monitor_client_client = Some(monitor_client.client());
+        let jh = tokio::spawn(async move{
+            let _res = monitor_client.run().await;
+        });
+        jh_list.push(jh);
+    }
     let stats_manager = StatsManager::new();
-    let counter_monitor = CounterMonitor::new(args.frequency.unwrap_or(2000));
-    let counter_monitor_client = counter_monitor.client();
-    let rocky = Rocky::new(args.address, args.port, args.device, stats_manager.client(), counter_monitor_client);
-    let _res = tokio::join!(rocky.run(), stats_manager.run(), counter_monitor.run());
+    let collector = Collector::new(args.frequency.unwrap_or(2000), monitor_client_client);
+    let collector_client = collector.client();
+
+    let rocky = Rocky::new(args.address, args.port, args.device, stats_manager.client(), collector_client);
+    let jh = tokio::spawn(async move{
+        let _res = collector.run().await;
+    });
+    jh_list.push(jh);
+    let jh = tokio::spawn(async move{
+        let _res = stats_manager.run().await;
+    });
+    jh_list.push(jh);
+    let jh = tokio::spawn(async move{
+        let _res = rocky.run().await;
+    });
+    jh_list.push(jh);
+    futures::future::join_all(jh_list).await;
     Ok(())
 }
 
@@ -63,7 +91,7 @@ pub struct Rocky{
     port: u16,
     device: Option<String>,
     client: Client,
-    monitor_client: CounterMonitorClient,
+    collector_client: CollectorClient,
 }
 
 #[tonic::async_trait]
@@ -79,8 +107,8 @@ impl Monitor for Rocky {
         let (monitor_tx, mut monitor_rx) = tokio::sync::mpsc::channel(120);
         let id = uuid::Uuid::new_v4().to_string();
         info!("registering monitor client with id: {}", id.clone());
-        self.monitor_client.register(id.clone(), monitor_tx, req).await.unwrap();
-        let monitor_client = self.monitor_client.clone();
+        self.collector_client.register(id.clone(), monitor_tx, req).await.unwrap();
+        let collector_client = self.collector_client.clone();
         tokio::spawn(async move{
             while let Some(counter) = monitor_rx.recv().await{
                 match tx.send(Result::<_, Status>::Ok(counter)).await {
@@ -92,7 +120,7 @@ impl Monitor for Rocky {
                 }
             }
             info!("monitor done");
-            monitor_client.unregister(id).await.unwrap();
+            collector_client.unregister(id).await.unwrap();
         });
         let output_stream = ReceiverStream::new(rx);
         Ok(Response::new(
@@ -229,13 +257,13 @@ impl GrpcStatsManager for Rocky {
 
 
 impl Rocky{
-    pub fn new(address: String, port: u16, device: Option<String>, client: Client, monitor_client: CounterMonitorClient) -> Rocky {
+    pub fn new(address: String, port: u16, device: Option<String>, client: Client, collector_client: CollectorClient) -> Rocky {
         Rocky{
             address,
             port,
             device,
             client,
-            monitor_client,
+            collector_client,
         }
     }
     pub async fn run(self) -> anyhow::Result<()> {
@@ -288,6 +316,10 @@ pub fn request_to_cmd(request: Request, device_name: Option<String>, suffix: &st
         cmd.arg("-n").arg(request.iterations().to_string());
     }
 
+    if let Some(duration) = request.duration{
+        cmd.arg("-D").arg(duration.to_string());
+    }
+
     cmd.arg("-p").arg(request.server_port.to_string());
     if let Some(msg_size) = request.message_size{
         cmd.arg("-s").arg(msg_size.to_string());
@@ -303,6 +335,7 @@ pub fn request_to_cmd(request: Request, device_name: Option<String>, suffix: &st
 
 pub async fn listen(mut request: Request, device_name: Option<String>, port: u16, tx: tokio::sync::oneshot::Sender<bool>, client: Client) -> anyhow::Result<()> {
     info!("listening on port {}", port);
+
     request.server_port = port as u32;
     let mut cmd = request_to_cmd(request.clone(), device_name, "server");
     let mut child = cmd.
@@ -318,7 +351,7 @@ pub async fn listen(mut request: Request, device_name: Option<String>, port: u16
         }
     }
     tx.send(true).unwrap();
-
+    info!("serving request: {:?}", request.clone().uuid());
     child.wait().await?;
     client.add(request.clone().uuid().to_string(), "server".to_string()).await?;
     Ok(())
@@ -332,10 +365,10 @@ pub async fn initiate(mut request: Request, device: Option<String>, client: Clie
     let server_reply = server_client.server(grpc_request).await?.into_inner();
     let port = server_reply.port;
     request.server_port = port as u32;
+    info!("initiating request: {:?}", request.clone().uuid());
     let mut cmd = request_to_cmd(request.clone(), device, "initiator");
     cmd.arg(request.clone().server_address);
     let _out = cmd.output().await?;
-    //let report = stats_manager::Report::new(request.clone().uuid(), "initiator");
     client.add(request.clone().uuid().to_string(), "initiator".to_string()).await?;
     Ok(())
 }

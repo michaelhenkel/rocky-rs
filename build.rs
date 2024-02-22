@@ -7,4 +7,13 @@ fn main() {
         &["proto"]
     )
     .unwrap();
+
+    tonic_build::configure()
+    .out_dir("monitor/src/server")
+    .include_file("mod.rs")
+    .compile(
+        &["monitor/src/proto/monitor.proto"],
+        &["proto"]
+    )
+    .unwrap();
 }

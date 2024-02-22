@@ -101,6 +101,8 @@ pub struct Request {
     pub mode: i32,
     #[prost(bool, tag = "9")]
     pub cm: bool,
+    #[prost(uint32, optional, tag = "10")]
+    pub duration: ::core::option::Option<u32>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

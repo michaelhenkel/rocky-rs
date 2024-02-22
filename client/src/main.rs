@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use byte_unit::Byte;
+use gui::gui::Gui;
 use rocky_rs::connection_manager::connection_manager::{
     initiator_connection_client::InitiatorConnectionClient, 
     stats_manager_client::StatsManagerClient, 
@@ -12,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use clap::{Parser, Subcommand};
 use config::config::load_config;
 pub mod config;
+pub mod gui;
 use std::io::{Write, stdout};
 use crossterm::{QueueableCommand, cursor, terminal, ExecutableCommand};
 
@@ -58,6 +60,8 @@ enum Commands {
         config: Option<String>,
         #[clap(short, long)]
         cm: Option<bool>,
+        #[clap(short='D', long)]
+        duration: Option<u32>,
     },
     Stats {
         #[clap(short, long)]
@@ -75,6 +79,7 @@ enum Commands {
         #[clap(short, long)]
         filter: Option<MonitorFilter>,
     },
+    Gui{},
 }
 
 #[derive(Parser, Debug, Clone, Serialize, Deserialize)]
@@ -147,6 +152,8 @@ pub struct CliArgs{
     config: Option<String>,
     #[clap(short, long)]
     cm: Option<bool>,
+    #[clap(short, long)]
+    duration: Option<u32>,
 }
 
 impl Into<Request> for CliArgs {
@@ -173,6 +180,7 @@ impl Into<Request> for CliArgs {
             operation: operation.into(),
             mode: mode.into(),
             cm: self.cm.unwrap_or(false),
+            duration: self.duration,
         }
     }
 }
@@ -191,7 +199,7 @@ pub struct ConfigArgs{
 impl Into<Request> for Commands {
     fn into(self) -> Request {
         match self {
-            Commands::Run{server, initiator: _, server_port, initiator_port: _, op, mode, message_size, iterations, mtu, config, cm} => {
+            Commands::Run{server, initiator: _, server_port, initiator_port: _, op, mode, message_size, iterations, mtu, config: _, cm, duration} => {
                 let mtu = if let Some(mtu) = mtu{
                     Some(Mtu::from(mtu).into())
                 } else {
@@ -214,6 +222,7 @@ impl Into<Request> for Commands {
                     operation: operation.into(),
                     mode: mode.into(),
                     cm: cm.unwrap_or(false),
+                    duration,
                 }
             },
             _ => panic!("invalid command"),
@@ -315,7 +324,7 @@ impl From<MtuSize> for Mtu {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     match args.clone().command {
-        Commands::Run{server: _, initiator, server_port: _, initiator_port, op: _, mode: _, message_size: _, iterations: _, mtu: _, config, cm: _} => {
+        Commands::Run{server: _, initiator, server_port: _, initiator_port, op: _, mode: _, message_size: _, iterations: _, mtu: _, config, cm: _, duration: _} => {
             if let Some(config) = config{
                 let config = load_config(&config);
                 for job in config{
@@ -364,7 +373,11 @@ async fn main() -> anyhow::Result<()> {
                 stdout.queue(cursor::RestorePosition).unwrap();
                 stdout.queue(terminal::Clear(terminal::ClearType::FromCursorDown)).unwrap();
             }
-        }
+        },
+        Commands::Gui{} => {
+            let gui = Gui::new();
+            gui.run();
+        },
     }
     Ok(())
 }
