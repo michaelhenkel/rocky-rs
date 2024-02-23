@@ -18,31 +18,90 @@ message Meta{
 }
 
 message Data{
-  uint64 unicast_xmit_packets = 1;
-  uint64 unicast_rcv_packets = 2;
-  uint64 port_xmit_wait = 3;
-  uint64 port_xmit_packets = 4;
-  uint64 port_xmit_data = 5;
-  uint64 port_rcv_packets = 6;
-  uint64 port_rcv_errors = 7;
-  uint64 port_rcv_data = 8;
-  uint64 multicast_xmit_packets = 9;
-  uint64 multicast_rcv_packets = 10;
-  uint64 rx_write_requests = 11;
-  uint64 rx_read_requests = 12;
-  uint64 rx_atomic_requests = 13;
-  uint64 resp_cqe_errors = 14;
-  uint64 req_cqe_errors = 15;
-  uint64 resp_cqe_fl = 16;
-  uint64 out_of_sequence = 17;
-  uint64 out_of_buffer = 18;
-  uint64 local_ack_timeout_errors = 19;
-  uint64 implied_nak_seq_errors = 20;
-  uint64 duplicate_request = 21;
-  double bytes_xmit_per_sec = 22;
-  double packets_xmit_per_sec = 23;
-  double bytes_rcv_per_sec = 24;
-  double packets_rcv_per_sec = 25;
+  oneof data {
+    RxeData rxe = 1;
+    MlxData mlx = 2;
+  }
+  double bytes_xmit_per_sec = 3;
+  double packets_xmit_per_sec = 4;
+  double bytes_rcv_per_sec = 5;
+  double packets_rcv_per_sec = 6;
+}
+
+message RxeData{
+  uint64 duplicate_request = 1;
+  uint64 sent_pkts = 2;
+  uint64 send_rnr_err = 3;
+  uint64 send_err = 4;
+  uint64 retry_rnr_exceeded_err = 5;
+  uint64 retry_exceeded_err = 6;
+  uint64 rdma_sends = 7;
+  uint64 rdma_recvs = 8;
+  uint64 rcvd_seq_err = 9;
+  uint64 rcvd_rnr_err = 10;
+  uint64 rcvd_pkts = 11;
+  uint64 out_of_seq_request = 12;
+  uint64 link_downed = 13;
+  uint64 lifespan = 14;
+  uint64 completer_retry_err = 15;
+  uint64 ack_deferred = 16;
+  uint64 port_rcv_data = 17;
+  uint64 port_rcv_packets = 18;
+  uint64 port_xmit_data = 19;
+  uint64 port_xmit_packets = 20;
+}
+
+message MlxData{
+  uint64 duplicate_request = 1;
+  uint64 implied_nak_seq_err = 2;
+  uint64 lifespan = 3;
+  uint64 local_ack_timeout_err = 4;
+  uint64 np_cnp_sent = 5;
+  uint64 np_ecn_marked_roce_packets = 6;
+  uint64 out_of_buffer = 7;
+  uint64 out_of_sequence = 8;
+  uint64 packet_seq_err = 9;
+  uint64 req_cqe_error = 10;
+  uint64 req_cqe_flush_error = 11;
+  uint64 req_remote_access_errors = 12;
+  uint64 req_remote_invalid_request = 13;
+  uint64 resp_cqe_error = 14;
+  uint64 resp_cqe_flush_error = 15;
+  uint64 resp_local_length_error = 16;
+  uint64 resp_remote_access_errors = 17;
+  uint64 rnr_nak_retry_err = 18;
+  uint64 roce_adp_retrans = 19;
+  uint64 roce_adp_retrans_to = 20;
+  uint64 roce_slow_restart = 21;
+  uint64 roce_slow_restart_cnps = 22;
+  uint64 roce_slow_restart_trans = 23;
+  uint64 rp_cnp_handled = 24;
+  uint64 rp_cnp_ignored = 25;
+  uint64 rx_atomic_requests = 26;
+  uint64 rx_icrc_encapsulated = 27;
+  uint64 rx_read_requests = 28;
+  uint64 rx_write_requests = 29;
+  uint64 vl15_dropped = 30;
+  uint64 excessive_buffer_overrun_errors = 31;
+  uint64 link_downed = 32;
+  uint64 link_error_recovery = 33;
+  uint64 local_link_integrity_errors = 34;
+  uint64 multicast_rcv_packets = 35;
+  uint64 multicast_xmit_packets = 36;
+  uint64 port_rcv_constraint_errors = 37;
+  uint64 port_rcv_data = 38;
+  uint64 port_rcv_errors = 39;
+  uint64 port_rcv_packets = 40;
+  uint64 port_rcv_remote_physical_errors = 41;
+  uint64 port_rcv_switch_relay_errors = 42;
+  uint64 port_xmit_constraint_errors = 43;
+  uint64 port_xmit_data = 44;
+  uint64 port_xmit_discards = 45;
+  uint64 port_xmit_packets = 46;
+  uint64 port_xmit_wait = 47;
+  uint64 symbol_error = 48;
+  uint64 unicast_rcv_packets = 49;
+  uint64 unicast_xmit_packets = 50;
 }
 
 message ReceiveReply {

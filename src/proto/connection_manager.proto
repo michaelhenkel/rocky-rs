@@ -16,54 +16,6 @@ service StatsManager {
   rpc DeleteReport (ReportRequest) returns (google.protobuf.Empty) {}
 }
 
-service Monitor{
-  rpc MonitorStream (CounterFilter) returns (stream InterfaceCounter) {}
-}
-
-message InterfaceCounter{
-  string name = 1;
-  map<uint32, MonitorCounters> counters = 2;
-}
-
-message MonitorCounters{
-  HwCounter hw_counter = 1;
-  PortCounter port_counter = 2;
-}
-
-message PortCounter{
-  uint64 unicast_xmit_packets = 1;
-  uint64 unicast_rcv_packets = 2;
-  uint64 port_xmit_wait = 3;
-  uint64 port_xmit_packets = 4;
-  uint64 port_xmit_data = 5;
-  uint64 port_rcv_packets = 6;
-  uint64 port_rcv_errors = 7;
-  uint64 port_rcv_data = 8;
-  uint64 multicast_xmit_packets = 9;
-  uint64 multicast_rcv_packets = 10;
-
-}
-
-message HwCounter{
-  uint64 rx_write_requests = 1;
-  uint64 rx_read_requests = 2;
-  uint64 rx_atomic_requests = 3;
-  uint64 resp_cqe_errors = 4;
-  uint64 req_cqe_errors = 5;
-  uint64 resp_cqe_fl = 6;
-  uint64 out_of_sequence = 7;
-  uint64 out_of_buffer = 8;
-  uint64 local_ack_timeout_errors = 9;
-  uint64 implied_nak_seq_errors = 10;
-  uint64 duplicate_request = 11;
-}
-
-message CounterFilter{
-  optional string interface = 1;
-  optional uint32 port = 2;
-  repeated string counter_list = 3; 
-}
-
 message ServerReply {
   uint32 port = 1;
 }

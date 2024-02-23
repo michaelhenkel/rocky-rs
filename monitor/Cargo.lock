@@ -1003,6 +1003,7 @@ dependencies = [
  "log",
  "prometheus",
  "prost",
+ "serde",
  "tokio",
  "tokio-stream",
  "tonic",

@@ -83,6 +83,7 @@ impl WebServer {
                 let hostname = meta.hostname.clone();
                 let interface = meta.interface.clone();
                 let port = meta.port.clone();
+                /*
                 Pin::new(&mut gauge_map.get("unicast_xmit_packets").unwrap()).with_label_values(&[&hostname, &interface, &port]).set(data.unicast_xmit_packets as f64);
                 Pin::new(&mut gauge_map.get("unicast_rcv_packets").unwrap()).with_label_values(&[&hostname, &interface, &port]).set(data.unicast_rcv_packets as f64);
                 Pin::new(&mut gauge_map.get("port_xmit_wait").unwrap()).with_label_values(&[&hostname, &interface, &port]).set(data.port_xmit_wait as f64);
@@ -107,6 +108,7 @@ impl WebServer {
                 Pin::new(&mut gauge_map.get("packets_xmit_per_sec").unwrap()).with_label_values(&[&hostname, &interface, &port]).set(data.packets_xmit_per_sec as f64);
                 Pin::new(&mut gauge_map.get("bytes_rcv_per_sec").unwrap()).with_label_values(&[&hostname, &interface, &port]).set(data.bytes_rcv_per_sec as f64);
                 Pin::new(&mut gauge_map.get("packets_rcv_per_sec").unwrap()).with_label_values(&[&hostname, &interface, &port]).set(data.packets_rcv_per_sec as f64);
+                */
             }
         });
 

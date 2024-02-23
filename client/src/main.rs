@@ -4,8 +4,6 @@ use gui::gui::Gui;
 use rocky_rs::connection_manager::connection_manager::{
     initiator_connection_client::InitiatorConnectionClient, 
     stats_manager_client::StatsManagerClient, 
-    monitor_client::MonitorClient,
-    CounterFilter,
     Mode, Mtu, Operation, ReportList, ReportRequest, Request
 };
 use tokio_stream::StreamExt;
@@ -71,48 +69,7 @@ enum Commands {
         #[clap(subcommand)]
         command: StatsCommands,
     },
-    Monitor {
-        #[clap(short, long)]
-        address: String,
-        #[clap(short, long)]
-        port: u16,
-        #[clap(short, long)]
-        filter: Option<MonitorFilter>,
-    },
     Gui{},
-}
-
-#[derive(Parser, Debug, Clone, Serialize, Deserialize)]
-pub struct MonitorFilter{
-    #[clap(short, long)]
-    interface: Option<String>,
-    #[clap(short, long)]
-    port: Option<u32>,
-    #[clap(short, long)]
-    counter_list: Vec<String>,
-}
-
-impl FromStr for MonitorFilter{
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut filter = MonitorFilter{
-            interface: None,
-            port: None,
-            counter_list: vec![],
-        };
-        for item in s.split_whitespace(){
-            let mut item = item.split("=");
-            let key = item.next().unwrap();
-            let value = item.next().unwrap();
-            match key {
-                "interface" => filter.interface = Some(value.to_string()),
-                "port" => filter.port = Some(value.parse().unwrap()),
-                "counter_list" => filter.counter_list = value.split(",").map(|s| s.to_string()).collect(),
-                _ => return Err("invalid filter".to_string()),
-            }
-        }
-        Ok(filter)
-    }
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
@@ -351,27 +308,6 @@ async fn main() -> anyhow::Result<()> {
                 StatsCommands::Remove{uuid, suffix} => {
                     stats_remove(uuid, suffix, address, port).await?;
                 },
-            }
-        },
-        Commands::Monitor { address, port, filter } => {
-            let address = format!("http://{}:{}",address, port);
-            let mut client = MonitorClient::connect(address).await?;
-            let counter_filter = CounterFilter{
-                interface: filter.as_ref().map(|f| f.interface.clone()).unwrap_or_default(),
-                port: filter.as_ref().map(|f| f.port).unwrap_or_default(),
-                counter_list: filter.map(|f| f.counter_list).unwrap_or_default(),
-            };
-            let request = tonic::Request::new(counter_filter);
-            let mut stream = client.monitor_stream(request).await?.into_inner();
-            let mut stdout = stdout();
-            stdout.execute(cursor::Hide).unwrap();
-            while let Some(item) = stream.next().await {
-                stdout.queue(cursor::SavePosition).unwrap();
-                stdout.write_all(format!("{:#?}", item).as_bytes()).unwrap();
-                stdout.queue(cursor::RestorePosition).unwrap();
-                stdout.flush().unwrap();
-                stdout.queue(cursor::RestorePosition).unwrap();
-                stdout.queue(terminal::Clear(terminal::ClearType::FromCursorDown)).unwrap();
             }
         },
         Commands::Gui{} => {

@@ -19,56 +19,177 @@ pub struct Meta {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Data {
-    #[prost(uint64, tag = "1")]
-    pub unicast_xmit_packets: u64,
-    #[prost(uint64, tag = "2")]
-    pub unicast_rcv_packets: u64,
-    #[prost(uint64, tag = "3")]
-    pub port_xmit_wait: u64,
-    #[prost(uint64, tag = "4")]
-    pub port_xmit_packets: u64,
-    #[prost(uint64, tag = "5")]
-    pub port_xmit_data: u64,
-    #[prost(uint64, tag = "6")]
-    pub port_rcv_packets: u64,
-    #[prost(uint64, tag = "7")]
-    pub port_rcv_errors: u64,
-    #[prost(uint64, tag = "8")]
-    pub port_rcv_data: u64,
-    #[prost(uint64, tag = "9")]
-    pub multicast_xmit_packets: u64,
-    #[prost(uint64, tag = "10")]
-    pub multicast_rcv_packets: u64,
-    #[prost(uint64, tag = "11")]
-    pub rx_write_requests: u64,
-    #[prost(uint64, tag = "12")]
-    pub rx_read_requests: u64,
-    #[prost(uint64, tag = "13")]
-    pub rx_atomic_requests: u64,
-    #[prost(uint64, tag = "14")]
-    pub resp_cqe_errors: u64,
-    #[prost(uint64, tag = "15")]
-    pub req_cqe_errors: u64,
-    #[prost(uint64, tag = "16")]
-    pub resp_cqe_fl: u64,
-    #[prost(uint64, tag = "17")]
-    pub out_of_sequence: u64,
-    #[prost(uint64, tag = "18")]
-    pub out_of_buffer: u64,
-    #[prost(uint64, tag = "19")]
-    pub local_ack_timeout_errors: u64,
-    #[prost(uint64, tag = "20")]
-    pub implied_nak_seq_errors: u64,
-    #[prost(uint64, tag = "21")]
-    pub duplicate_request: u64,
-    #[prost(double, tag = "22")]
+    #[prost(double, tag = "3")]
     pub bytes_xmit_per_sec: f64,
-    #[prost(double, tag = "23")]
+    #[prost(double, tag = "4")]
     pub packets_xmit_per_sec: f64,
-    #[prost(double, tag = "24")]
+    #[prost(double, tag = "5")]
     pub bytes_rcv_per_sec: f64,
-    #[prost(double, tag = "25")]
+    #[prost(double, tag = "6")]
     pub packets_rcv_per_sec: f64,
+    #[prost(oneof = "data::Data", tags = "1, 2")]
+    pub data: ::core::option::Option<data::Data>,
+}
+/// Nested message and enum types in `Data`.
+pub mod data {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Data {
+        #[prost(message, tag = "1")]
+        Rxe(super::RxeData),
+        #[prost(message, tag = "2")]
+        Mlx(super::MlxData),
+    }
+}
+#[derive(serde::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RxeData {
+    #[prost(uint64, tag = "1")]
+    pub duplicate_request: u64,
+    #[prost(uint64, tag = "2")]
+    pub sent_pkts: u64,
+    #[prost(uint64, tag = "3")]
+    pub send_rnr_err: u64,
+    #[prost(uint64, tag = "4")]
+    pub send_err: u64,
+    #[prost(uint64, tag = "5")]
+    pub retry_rnr_exceeded_err: u64,
+    #[prost(uint64, tag = "6")]
+    pub retry_exceeded_err: u64,
+    #[prost(uint64, tag = "7")]
+    pub rdma_sends: u64,
+    #[prost(uint64, tag = "8")]
+    pub rdma_recvs: u64,
+    #[prost(uint64, tag = "9")]
+    pub rcvd_seq_err: u64,
+    #[prost(uint64, tag = "10")]
+    pub rcvd_rnr_err: u64,
+    #[prost(uint64, tag = "11")]
+    pub rcvd_pkts: u64,
+    #[prost(uint64, tag = "12")]
+    pub out_of_seq_request: u64,
+    #[prost(uint64, tag = "13")]
+    pub link_downed: u64,
+    #[prost(uint64, tag = "14")]
+    pub lifespan: u64,
+    #[prost(uint64, tag = "15")]
+    pub completer_retry_err: u64,
+    #[prost(uint64, tag = "16")]
+    pub ack_deferred: u64,
+    #[prost(uint64, tag = "17")]
+    pub port_rcv_data: u64,
+    #[prost(uint64, tag = "18")]
+    pub port_rcv_packets: u64,
+    #[prost(uint64, tag = "19")]
+    pub port_xmit_data: u64,
+    #[prost(uint64, tag = "20")]
+    pub port_xmit_packets: u64,
+}
+#[derive(serde::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MlxData {
+    #[prost(uint64, tag = "1")]
+    pub duplicate_request: u64,
+    #[prost(uint64, tag = "2")]
+    pub implied_nak_seq_err: u64,
+    #[prost(uint64, tag = "3")]
+    pub lifespan: u64,
+    #[prost(uint64, tag = "4")]
+    pub local_ack_timeout_err: u64,
+    #[prost(uint64, tag = "5")]
+    pub np_cnp_sent: u64,
+    #[prost(uint64, tag = "6")]
+    pub np_ecn_marked_roce_packets: u64,
+    #[prost(uint64, tag = "7")]
+    pub out_of_buffer: u64,
+    #[prost(uint64, tag = "8")]
+    pub out_of_sequence: u64,
+    #[prost(uint64, tag = "9")]
+    pub packet_seq_err: u64,
+    #[prost(uint64, tag = "10")]
+    pub req_cqe_error: u64,
+    #[prost(uint64, tag = "11")]
+    pub req_cqe_flush_error: u64,
+    #[prost(uint64, tag = "12")]
+    pub req_remote_access_errors: u64,
+    #[prost(uint64, tag = "13")]
+    pub req_remote_invalid_request: u64,
+    #[prost(uint64, tag = "14")]
+    pub resp_cqe_error: u64,
+    #[prost(uint64, tag = "15")]
+    pub resp_cqe_flush_error: u64,
+    #[prost(uint64, tag = "16")]
+    pub resp_local_length_error: u64,
+    #[prost(uint64, tag = "17")]
+    pub resp_remote_access_errors: u64,
+    #[prost(uint64, tag = "18")]
+    pub rnr_nak_retry_err: u64,
+    #[prost(uint64, tag = "19")]
+    pub roce_adp_retrans: u64,
+    #[prost(uint64, tag = "20")]
+    pub roce_adp_retrans_to: u64,
+    #[prost(uint64, tag = "21")]
+    pub roce_slow_restart: u64,
+    #[prost(uint64, tag = "22")]
+    pub roce_slow_restart_cnps: u64,
+    #[prost(uint64, tag = "23")]
+    pub roce_slow_restart_trans: u64,
+    #[prost(uint64, tag = "24")]
+    pub rp_cnp_handled: u64,
+    #[prost(uint64, tag = "25")]
+    pub rp_cnp_ignored: u64,
+    #[prost(uint64, tag = "26")]
+    pub rx_atomic_requests: u64,
+    #[prost(uint64, tag = "27")]
+    pub rx_icrc_encapsulated: u64,
+    #[prost(uint64, tag = "28")]
+    pub rx_read_requests: u64,
+    #[prost(uint64, tag = "29")]
+    pub rx_write_requests: u64,
+    #[prost(uint64, tag = "30")]
+    pub vl15_dropped: u64,
+    #[prost(uint64, tag = "31")]
+    pub excessive_buffer_overrun_errors: u64,
+    #[prost(uint64, tag = "32")]
+    pub link_downed: u64,
+    #[prost(uint64, tag = "33")]
+    pub link_error_recovery: u64,
+    #[prost(uint64, tag = "34")]
+    pub local_link_integrity_errors: u64,
+    #[prost(uint64, tag = "35")]
+    pub multicast_rcv_packets: u64,
+    #[prost(uint64, tag = "36")]
+    pub multicast_xmit_packets: u64,
+    #[prost(uint64, tag = "37")]
+    pub port_rcv_constraint_errors: u64,
+    #[prost(uint64, tag = "38")]
+    pub port_rcv_data: u64,
+    #[prost(uint64, tag = "39")]
+    pub port_rcv_errors: u64,
+    #[prost(uint64, tag = "40")]
+    pub port_rcv_packets: u64,
+    #[prost(uint64, tag = "41")]
+    pub port_rcv_remote_physical_errors: u64,
+    #[prost(uint64, tag = "42")]
+    pub port_rcv_switch_relay_errors: u64,
+    #[prost(uint64, tag = "43")]
+    pub port_xmit_constraint_errors: u64,
+    #[prost(uint64, tag = "44")]
+    pub port_xmit_data: u64,
+    #[prost(uint64, tag = "45")]
+    pub port_xmit_discards: u64,
+    #[prost(uint64, tag = "46")]
+    pub port_xmit_packets: u64,
+    #[prost(uint64, tag = "47")]
+    pub port_xmit_wait: u64,
+    #[prost(uint64, tag = "48")]
+    pub symbol_error: u64,
+    #[prost(uint64, tag = "49")]
+    pub unicast_rcv_packets: u64,
+    #[prost(uint64, tag = "50")]
+    pub unicast_xmit_packets: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

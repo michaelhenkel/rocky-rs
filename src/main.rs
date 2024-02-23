@@ -1,6 +1,6 @@
 use clap::Parser;
 use rocky_rs::monitor_client::monitor_client::MonitorClient;
-use rocky_rs::stats_manager::collector::collector::{Collector, CollectorClient};
+use rocky_rs::stats_manager::collector::collector::Collector;
 use tokio_stream::{wrappers::ReceiverStream, Stream};
 use rocky_rs::connection_manager::connection_manager::server_connection_client::ServerConnectionClient;
 use rocky_rs::connection_manager::connection_manager::{Mode, Mtu, Operation};
@@ -14,12 +14,8 @@ use rocky_rs::connection_manager::connection_manager::{
     stats_manager_server::{
         StatsManager as GrpcStatsManager, StatsManagerServer,
     },
-    monitor_server::{
-        Monitor, MonitorServer,
-    },
     InitiatorReply, Request,
     ServerReply, Report, ReportReply, ReportList, ReportRequest,
-    CounterFilter, InterfaceCounter
 };
 use tonic::{transport::Server as GrpcServer,Request as GrpcRequest, Status, Response};
 use log::{error, info};
@@ -27,11 +23,11 @@ use tokio::process::Command;
 use std::pin::Pin;
 use std::process::Stdio;
 use port_scanner;
-use rocky_rs::stats_manager::stats_manager::{Client, StatsManager};
+use rocky_rs::stats_manager::{
+    collector::collector::Driver,
+    stats_manager::{Client, StatsManager}
+};
 
-
-type MonitorResult<T> = anyhow::Result<Response<T>, Status>;
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<InterfaceCounter, Status>> + Send>>;
 
 
 
@@ -47,6 +43,8 @@ struct Args{
     frequency: Option<u64>,
     #[arg(short, long)]
     stats_server: Option<String>,
+    #[clap(value_enum, short, long, default_value = "rxe")]
+    driver: Driver,
 }
 
 #[tokio::main]
@@ -65,10 +63,8 @@ async fn main() -> anyhow::Result<()>{
         jh_list.push(jh);
     }
     let stats_manager = StatsManager::new();
-    let collector = Collector::new(args.frequency.unwrap_or(2000), monitor_client_client);
-    let collector_client = collector.client();
-
-    let rocky = Rocky::new(args.address, args.port, args.device, stats_manager.client(), collector_client);
+    let collector = Collector::new(args.frequency.unwrap_or(2000), monitor_client_client, args.driver);
+    let rocky = Rocky::new(args.address, args.port, args.device, stats_manager.client());
     let jh = tokio::spawn(async move{
         let _res = collector.run().await;
     });
@@ -91,43 +87,6 @@ pub struct Rocky{
     port: u16,
     device: Option<String>,
     client: Client,
-    collector_client: CollectorClient,
-}
-
-#[tonic::async_trait]
-impl Monitor for Rocky {
-    type MonitorStreamStream = ResponseStream;
-    async fn monitor_stream(
-        &self,
-        req: GrpcRequest<CounterFilter>,
-    ) -> MonitorResult<ResponseStream> {
-        let req = req.into_inner();
-        info!("monitor stream request: {:?}", req.clone());
-        let (tx, rx) = tokio::sync::mpsc::channel(128);
-        let (monitor_tx, mut monitor_rx) = tokio::sync::mpsc::channel(120);
-        let id = uuid::Uuid::new_v4().to_string();
-        info!("registering monitor client with id: {}", id.clone());
-        self.collector_client.register(id.clone(), monitor_tx, req).await.unwrap();
-        let collector_client = self.collector_client.clone();
-        tokio::spawn(async move{
-            while let Some(counter) = monitor_rx.recv().await{
-                match tx.send(Result::<_, Status>::Ok(counter)).await {
-                    Ok(_) => {},
-                    Err(e) => {
-                        error!("monitor send error: {:?}", e);
-                        break;
-                    }
-                }
-            }
-            info!("monitor done");
-            collector_client.unregister(id).await.unwrap();
-        });
-        let output_stream = ReceiverStream::new(rx);
-        Ok(Response::new(
-            Box::pin(output_stream) as ResponseStream
-        ))
-    }
-
 }
 
 #[tonic::async_trait]
@@ -257,13 +216,12 @@ impl GrpcStatsManager for Rocky {
 
 
 impl Rocky{
-    pub fn new(address: String, port: u16, device: Option<String>, client: Client, collector_client: CollectorClient) -> Rocky {
+    pub fn new(address: String, port: u16, device: Option<String>, client: Client) -> Rocky {
         Rocky{
             address,
             port,
             device,
             client,
-            collector_client,
         }
     }
     pub async fn run(self) -> anyhow::Result<()> {
@@ -274,7 +232,6 @@ impl Rocky{
         .add_service(ServerConnectionServer::new(self.clone()))
         .add_service(InitiatorConnectionServer::new(self.clone()))
         .add_service(StatsManagerServer::new(self.clone()))
-        .add_service(MonitorServer::new(self))
         .serve(addr)
         .await?;
         Ok(())
