@@ -19,14 +19,8 @@ pub struct Meta {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Data {
-    #[prost(double, tag = "3")]
-    pub bytes_xmit_per_sec: f64,
-    #[prost(double, tag = "4")]
-    pub packets_xmit_per_sec: f64,
-    #[prost(double, tag = "5")]
-    pub bytes_rcv_per_sec: f64,
-    #[prost(double, tag = "6")]
-    pub packets_rcv_per_sec: f64,
+    #[prost(message, optional, tag = "3")]
+    pub per_sec: ::core::option::Option<PerSec>,
     #[prost(oneof = "data::Data", tags = "1, 2")]
     pub data: ::core::option::Option<data::Data>,
 }
@@ -40,6 +34,19 @@ pub mod data {
         #[prost(message, tag = "2")]
         Mlx(super::MlxData),
     }
+}
+#[derive(serde::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PerSec {
+    #[prost(double, tag = "3")]
+    pub bytes_xmit_per_sec: f64,
+    #[prost(double, tag = "4")]
+    pub packets_xmit_per_sec: f64,
+    #[prost(double, tag = "5")]
+    pub bytes_rcv_per_sec: f64,
+    #[prost(double, tag = "6")]
+    pub packets_rcv_per_sec: f64,
 }
 #[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -80,12 +87,17 @@ pub struct RxeData {
     #[prost(uint64, tag = "17")]
     pub port_rcv_data: u64,
     #[prost(uint64, tag = "18")]
-    pub port_rcv_packets: u64,
-    #[prost(uint64, tag = "19")]
     pub port_xmit_data: u64,
-    #[prost(uint64, tag = "20")]
-    pub port_xmit_packets: u64,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PathOption {
+    #[prost(string, tag = "1")]
+    pub path_option: ::prost::alloc::string::String,
+}
+#[path_resolver::derive_path::derive_path(
+    path = "/sys/net/{{ linux_interface }}/statistics"
+)]
 #[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

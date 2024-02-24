@@ -6,14 +6,11 @@ use rocky_rs::connection_manager::connection_manager::{
     stats_manager_client::StatsManagerClient, 
     Mode, Mtu, Operation, ReportList, ReportRequest, Request
 };
-use tokio_stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use clap::{Parser, Subcommand};
 use config::config::load_config;
 pub mod config;
 pub mod gui;
-use std::io::{Write, stdout};
-use crossterm::{QueueableCommand, cursor, terminal, ExecutableCommand};
 
 #[derive(Parser, Debug, Clone)]
 pub enum CliConfig{

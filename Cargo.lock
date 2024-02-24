@@ -807,6 +807,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive_path"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1404,9 +1414,11 @@ dependencies = [
  "clap",
  "env_logger",
  "log",
+ "path_resolver",
  "prometheus",
  "prost",
  "serde",
+ "serde-value",
  "tokio",
  "tokio-stream",
  "tonic",
@@ -1593,6 +1605,21 @@ name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
+name = "path_resolver"
+version = "0.1.0"
+dependencies = [
+ "derive_path",
+ "path_trait",
+]
+
+[[package]]
+name = "path_trait"
+version = "0.1.0"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "percent-encoding"
@@ -2001,6 +2028,7 @@ dependencies = [
  "hostname",
  "log",
  "monitor",
+ "path_resolver",
  "phf",
  "port_scanner",
  "portpicker",

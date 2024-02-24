@@ -1,13 +1,11 @@
-use std::process::Command;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashSet, process::Command};
+use std::collections::HashMap;
 use log::{error, info};
-use serde::de::value;
 use serde_value::Value;
-use tokio::sync::RwLock;
 use crate::monitor_client::monitor_client::Client;
-use monitor::server::monitor::{Stats, Meta, Data, RxeData, MlxData, data};
+use monitor::server::monitor::{Stats, Meta, Data, RxeData, MlxData, PerSec, data};
 use gethostname;
-use ::phf::{Map, phf_map};
+use path_resolver::path_trait::PathResolver;
 
 const MLX_COUNTERS: &'static [&'static str] = &[
     "VL15_dropped",
@@ -115,44 +113,58 @@ impl std::str::FromStr for Driver{
 }
 
 impl Driver{
-    pub fn get_counters(&self, interface: &str, port: &str) -> Data {
-        match self{
+    pub fn get_counters(&self, interface: &str, port: &str, linux_interface: &str) -> Data {
+        let mut vars_map = HashMap::new();
+        vars_map.insert("interface".to_string(), interface.to_string());
+        vars_map.insert("port".to_string(), port.to_string());
+        vars_map.insert("linux_interface".to_string(), linux_interface.to_string());
+        let mut data = match self{
             Driver::Mlx => {
-
                 let mlx_data = MlxData::default();
-
+                let path = mlx_data.resolve_path(vars_map);
+                let mut fields_map = HashSet::new();
+                get_data_fields(&mlx_data, &mut fields_map);
+                for counter in fields_map{
+                    let path = format!("/sys/class/infiniband/{}/ports/{}/counters/{}", interface, port, counter);
+                    let counter_value = self.read_counter(&path);
+                    set_field_by_name(&mlx_data, &counter, counter_value);
+                }
                 for counter in MLX_COUNTERS{
                     let path = format!("/sys/class/infiniband/{}/ports/{}/counters/{}", interface, port, counter);
                     let counter_value = self.read_counter(&path);
                     set_field_by_name(&mlx_data, counter, counter_value); 
                 }
-
                 for counter in MLX_HW_COUNTERS{
                     let path = format!("/sys/class/infiniband/{}/ports/{}/hw_counters/{}", interface, port, counter);
                     let counter_value = self.read_counter(&path);
                     set_field_by_name(&mlx_data, counter, counter_value); 
                 }
-
                 let mut monitor_data = Data::default();
                 monitor_data.data = Some(data::Data::Mlx(mlx_data));
                 monitor_data
 
             },
             Driver::Rxe => {
-
                 let rxe_data = RxeData::default();
-
                 for counter in RXE_COUNTERS{
                     let path = format!("/sys/class/infiniband/{}/ports/{}/hw_counters/{}", interface, port, counter);
                     let counter_value = self.read_counter(&path);
                     set_field_by_name(&rxe_data, counter, counter_value); 
                 }
+                let path = format!("/sys/class/net/{}/statistics/tx_bytes", linux_interface);
+                let counter_value = self.read_counter(&path);
+                set_field_by_name(&rxe_data, "port_xmit_data", counter_value);
+                let path = format!("/sys/class/net/{}/statistics/rx_bytes", linux_interface);
+                let counter_value = self.read_counter(&path);
+                set_field_by_name(&rxe_data, "port_rcv_data", counter_value);
                 let mut monitor_data = Data::default();
                 monitor_data.data = Some(data::Data::Rxe(rxe_data));
+                info!("{:?}", monitor_data);
                 monitor_data
             },
-
-        }
+        };
+        data.per_sec = Some(PerSec::default());
+        data
     }
     fn read_counter(&self, path: &str) -> u64
     {
@@ -186,6 +198,22 @@ where
     let key = Value::String(field.to_string());
     let value = Value::U64(value);
     map.insert(key, value);
+}
+
+fn get_data_fields<T>(data: &T, fields_map: &mut HashSet<String>)
+where
+    T: serde::Serialize,
+{
+    let map = match serde_value::to_value(data){
+        Ok(serde_value::Value::Map(map)) => map,
+        _ => {
+            panic!("Error converting to value");
+        }
+    };
+    for (k,_) in map.iter(){
+        let k: String = k.clone().deserialize_into().unwrap();
+        fields_map.insert(k);
+    }
 }
 
 impl Interface{
@@ -250,7 +278,7 @@ impl Collector{
         let jh = tokio::spawn(async move{
             while let Some(stats) = rx.recv().await{
                 if let Some(monitor_client) = monitor_client.clone(){
-
+                    info!("sending stats: {:#?}", stats);
                     if let Err(e) = monitor_client.send(stats).await{
                         error!("Error sending stats: {}", e);
                     }
@@ -268,151 +296,68 @@ async fn count(freq: u64, interfaces: Vec<Interface>, tx: tokio::sync::mpsc::Sen
     let hostname = gethostname::gethostname().to_string_lossy().to_string();
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(freq));
     let secs: f64 = freq as f64 / 1000 as f64;
-    //let mut history: HashMap<String,u64> = HashMap::new();
+    let mut history: HashMap<String,u64> = HashMap::new();
     info!("interfaces: {:?}", interfaces);
     loop{
         interval.tick().await;
         for interface in &interfaces{
             for port in &interface.ports{
-                let c = driver.get_counters(&interface.name, port);
-                
-                /* 
-                let hw_counters = HwCounters{
-                    rx_write_requests: hw_counter_path(&interface.name, port, "rx_write_requests"),
-                    rx_read_requests: hw_counter_path(&interface.name, port, "rx_read_requests"),
-                    rx_atomic_requests: hw_counter_path(&interface.name, port, "rx_atomic_requests"),
-                    resp_cqe_errors: hw_counter_path(&interface.name, port, "resp_cqe_error"),
-                    req_cqe_errors: hw_counter_path(&interface.name, port, "req_cqe_error"),
-                    resp_cqe_fl: hw_counter_path(&interface.name, port, "resp_cqe_flush_error"),
-                    out_of_sequence: hw_counter_path(&interface.name, port, "out_of_sequence"),
-                    out_of_buffer: hw_counter_path(&interface.name, port, "out_of_buffer"),
-                    local_ack_timeout_errors: hw_counter_path(&interface.name, port, "local_ack_timeout_err"),
-                    implied_nak_seq_errors: hw_counter_path(&interface.name, port, "implied_nak_seq_err"),
-                    duplicate_request: hw_counter_path(&interface.name, port, "duplicate_request")
+                let mut counters = driver.get_counters(&interface.name, port, &interface.linux_name);
+                let per_sec = counters.per_sec.as_mut().unwrap();
+                let (rcv_packets, rcv_data, xmit_packets, xmit_data) = match counters.data.as_ref().unwrap(){
+                    data::Data::Mlx(data) => {
+                        (data.port_rcv_packets, data.port_rcv_data, data.port_xmit_packets, data.port_xmit_data)
+                    },
+                    data::Data::Rxe(data) => {
+                        (data.rcvd_pkts, data.port_rcv_data, data.sent_pkts, data.port_xmit_data)
+                    }
                 };
-                let (port_rcv_data, port_xmit_data, port_rcv_packets, port_xmit_packets) = if interface.name.contains("rxe"){
-                    let port_rcv_data = linux_counter_path(&interface.linux_name, "rx_bytes");
-                    let port_xmit_data = linux_counter_path(&interface.linux_name, "tx_bytes");
-                    let port_rcv_packets = linux_counter_path(&interface.linux_name, "rx_packets");
-                    let port_xmit_packets = linux_counter_path(&interface.linux_name, "tx_packets");
-                    (port_rcv_data, port_xmit_data, port_rcv_packets, port_xmit_packets)
-                } else {
-                    let port_rcv_data = counter_path(&interface.name, port, "port_rcv_data") / 4;
-                    let port_xmit_data = counter_path(&interface.name, port, "port_xmit_data") / 4;
-                    let port_rcv_packets = counter_path(&interface.name, port, "port_rcv_packets");
-                    let port_xmit_packets = counter_path(&interface.name, port, "port_xmit_packets");
-                    (port_rcv_data, port_xmit_data, port_rcv_packets, port_xmit_packets)
-                };
-
-                let port_counters = PortCounters{
-                    unicast_xmit_packets: counter_path(&interface.name, port, "unicast_xmit_packets"),
-                    unicast_rcv_packets: counter_path(&interface.name, port, "unicast_rcv_packets"),
-                    port_xmit_wait: counter_path(&interface.name, port, "port_xmit_wait"),
-                    port_xmit_packets: port_xmit_packets,
-                    port_xmit_data: port_xmit_data,
-                    port_rcv_packets: port_rcv_packets,
-                    port_rcv_errors: counter_path(&interface.name, port, "port_rcv_errors"),
-                    port_rcv_data: port_rcv_data,
-                    multicast_xmit_packets: counter_path(&interface.name, port, "multicast_xmit_packets"),
-                    multicast_rcv_packets: counter_path(&interface.name, port, "multicast_rcv_packets"),
-                };
-                let mut per_sec_counter = PerSecCounters::default();
 
                 let prev_port_rcv_packets_key = format!("{}_{}_rcv_packets", interface.name, port);
                 if let Some(prev_port_rcv_packets) = history.get(&prev_port_rcv_packets_key){
-                    if prev_port_rcv_packets.clone() < port_rcv_packets{
-                        per_sec_counter.packets_recv = (port_rcv_packets as f64 - prev_port_rcv_packets.clone() as f64) / secs;
+                    if prev_port_rcv_packets.clone() < rcv_packets{
+                        per_sec.packets_rcv_per_sec = (rcv_packets as f64 - prev_port_rcv_packets.clone() as f64) / secs;
                     }
                 }
-                history.insert(prev_port_rcv_packets_key, port_rcv_packets);
+                history.insert(prev_port_rcv_packets_key, rcv_packets);
+
                 let prev_port_rcv_data_key = format!("{}_{}_rcv_data", interface.name, port);
                 if let Some(prev_port_rcv_data) = history.get(&prev_port_rcv_data_key){
-                    if prev_port_rcv_data.clone() < port_rcv_data{
-                        per_sec_counter.bytes_recv = (port_rcv_data as f64 - prev_port_rcv_data.clone() as f64) / secs;
+                    if prev_port_rcv_data.clone() < rcv_data{
+                        per_sec.bytes_rcv_per_sec = (rcv_data as f64 - prev_port_rcv_data.clone() as f64) / secs;
                     }
                 }
-                history.insert(prev_port_rcv_data_key, port_rcv_data);
+                history.insert(prev_port_rcv_data_key, rcv_data);
+
                 let prev_port_xmit_packets_key = format!("{}_{}_xmit_packets", interface.name, port);
                 if let Some(prev_port_xmit_packets) = history.get(&prev_port_xmit_packets_key){
-                    if prev_port_xmit_packets.clone() < port_xmit_packets{
-                        per_sec_counter.packets_xmit = (port_xmit_packets as f64 - prev_port_xmit_packets.clone() as f64) / secs;
+                    if prev_port_xmit_packets.clone() < xmit_packets{
+                        per_sec.packets_xmit_per_sec = (xmit_packets as f64 - prev_port_xmit_packets.clone() as f64) / secs;
                     }
                 }
-                history.insert(prev_port_xmit_packets_key, port_xmit_packets);
+                history.insert(prev_port_xmit_packets_key, xmit_packets);
                 
                 let prev_port_xmit_data_key = format!("{}_{}_xmit_data", interface.name, port);
                 if let Some(prev_port_xmit_data) = history.get(&prev_port_xmit_data_key){
-                    if prev_port_xmit_data.clone() < port_xmit_data{
-                        per_sec_counter.bytes_xmit = (port_xmit_data as f64 - prev_port_xmit_data.clone() as f64) / secs;
+                    if prev_port_xmit_data.clone() < xmit_data{
+                        per_sec.bytes_xmit_per_sec = (xmit_data as f64 - prev_port_xmit_data.clone() as f64) / secs;
                     }
                 }
-                history.insert(prev_port_xmit_data_key, port_xmit_data);
+                history.insert(prev_port_xmit_data_key, xmit_data);
                 
-
-
-                let counters = Counters{
-                    interface: interface.name.clone(),
-                    port: port.to_string(),
-                    port_counters,
-                    hw_counters,
-                    per_sec_counters: per_sec_counter,
+                let stats = Stats{
+                    meta: Some(Meta{
+                        hostname: hostname.clone(),
+                        interface: interface.name.clone(),
+                        port: port.clone(),
+                    }),
+                    data: Some(counters),
                 };
-                if let Err(e) = tx.send(counters).await{
+        
+                if let Err(e) = tx.send(stats).await{
                     error!("Error sending counters: {}", e);
                 }
-                */
             }
-        }
-    }
-}
-
-fn counter_path(interface: &str, port: &str, counter_type: &str) -> u64
-{
-    let p = format!("/sys/class/infiniband/{}/ports/{}/counters/{}", interface, port, counter_type);
-    let v = match std::fs::read_to_string(p){
-        Ok(v) => v,
-        Err(_e) => {
-            return 0;
-        }
-    };
-    match v.trim().parse::<u64>(){
-        Ok(v) => v,
-        Err(_e) => {
-            0
-        }
-    }
-}
-
-fn linux_counter_path(interface: &str, counter_type: &str) -> u64
-{
-    let p = format!("/sys/class/net/{}/statistics/{}", interface, counter_type);
-    let v = match std::fs::read_to_string(p){
-        Ok(v) => v,
-        Err(_e) => {
-            return 0;
-        }
-    };
-    match v.trim().parse::<u64>(){
-        Ok(v) => v,
-        Err(_e) => {
-            0
-        }
-    }
-}
-
-fn hw_counter_path(interface: &str, port: &str, counter_type: &str) -> u64
-{
-    let p = format!("/sys/class/infiniband/{}/ports/{}/hw_counters/{}", interface, port, counter_type);
-    let v = match std::fs::read_to_string(p){
-        Ok(v) => v,
-        Err(_e) => {
-            return 0;
-        }
-    };
-    match v.trim().parse::<u64>(){
-        Ok(v) => v,
-        Err(_e) => {
-            0
         }
     }
 }

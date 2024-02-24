@@ -1,7 +1,6 @@
 use clap::Parser;
 use rocky_rs::monitor_client::monitor_client::MonitorClient;
 use rocky_rs::stats_manager::collector::collector::Collector;
-use tokio_stream::{wrappers::ReceiverStream, Stream};
 use rocky_rs::connection_manager::connection_manager::server_connection_client::ServerConnectionClient;
 use rocky_rs::connection_manager::connection_manager::{Mode, Mtu, Operation};
 use rocky_rs::connection_manager::connection_manager::{
@@ -17,10 +16,9 @@ use rocky_rs::connection_manager::connection_manager::{
     InitiatorReply, Request,
     ServerReply, Report, ReportReply, ReportList, ReportRequest,
 };
-use tonic::{transport::Server as GrpcServer,Request as GrpcRequest, Status, Response};
+use tonic::{transport::Server as GrpcServer,Request as GrpcRequest, Status};
 use log::{error, info};
 use tokio::process::Command;
-use std::pin::Pin;
 use std::process::Stdio;
 use port_scanner;
 use rocky_rs::stats_manager::{
@@ -63,7 +61,7 @@ async fn main() -> anyhow::Result<()>{
         jh_list.push(jh);
     }
     let stats_manager = StatsManager::new();
-    let collector = Collector::new(args.frequency.unwrap_or(2000), monitor_client_client, args.driver);
+    let collector = Collector::new(args.frequency.unwrap_or(1000), monitor_client_client, args.driver);
     let rocky = Rocky::new(args.address, args.port, args.device, stats_manager.client());
     let jh = tokio::spawn(async move{
         let _res = collector.run().await;

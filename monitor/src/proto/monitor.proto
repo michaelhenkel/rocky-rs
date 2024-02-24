@@ -1,5 +1,6 @@
 syntax = "proto3";
 import "google/protobuf/empty.proto";
+import "google/protobuf/descriptor.proto";
 package monitor;
 
 service MonitorServer {
@@ -22,6 +23,10 @@ message Data{
     RxeData rxe = 1;
     MlxData mlx = 2;
   }
+  PerSec per_sec = 3;
+}
+
+message PerSec{
   double bytes_xmit_per_sec = 3;
   double packets_xmit_per_sec = 4;
   double bytes_rcv_per_sec = 5;
@@ -46,12 +51,19 @@ message RxeData{
   uint64 completer_retry_err = 15;
   uint64 ack_deferred = 16;
   uint64 port_rcv_data = 17;
-  uint64 port_rcv_packets = 18;
-  uint64 port_xmit_data = 19;
-  uint64 port_xmit_packets = 20;
+  uint64 port_xmit_data = 18;
+}
+
+message PathOption {
+  string path_option = 1;
+}
+
+extend google.protobuf.MessageOptions {
+  optional PathOption message_options = 50000;
 }
 
 message MlxData{
+  option (message_options).path_option = "mlx";
   uint64 duplicate_request = 1;
   uint64 implied_nak_seq_err = 2;
   uint64 lifespan = 3;
