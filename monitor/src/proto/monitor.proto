@@ -20,8 +20,8 @@ message Meta{
 
 message Data{
   oneof data {
-    RxeData rxe = 1;
-    MlxData mlx = 2;
+    Rxe rxe = 1;
+    Mlx mlx = 2;
   }
   PerSec per_sec = 3;
 }
@@ -33,7 +33,12 @@ message PerSec{
   double packets_rcv_per_sec = 6;
 }
 
-message RxeData{
+message Rxe{
+  RxeCounter rxe_counter = 1;
+  RxeHwCounter rxe_hw_counter = 2;
+}
+
+message RxeHwCounter{
   uint64 duplicate_request = 1;
   uint64 sent_pkts = 2;
   uint64 send_rnr_err = 3;
@@ -50,20 +55,44 @@ message RxeData{
   uint64 lifespan = 14;
   uint64 completer_retry_err = 15;
   uint64 ack_deferred = 16;
-  uint64 port_rcv_data = 17;
-  uint64 port_xmit_data = 18;
+  uint64 port_xmit_data = 17;
 }
 
-message PathOption {
-  string path_option = 1;
+message RxeCounter{
+  uint64 rx_bytes = 1;
+  uint64 tx_bytes = 2;
 }
 
-extend google.protobuf.MessageOptions {
-  optional PathOption message_options = 50000;
+message Mlx{
+  MlxCounter mlx_counter = 1;
+  MlxHwCounter mlx_hw_counter = 2;
 }
 
-message MlxData{
-  option (message_options).path_option = "mlx";
+message MlxCounter{
+  uint64 vl15_dropped = 1;
+  uint64 excessive_buffer_overrun_errors = 2;
+  uint64 link_downed = 3;
+  uint64 link_error_recovery = 4;
+  uint64 local_link_integrity_errors = 5;
+  uint64 multicast_rcv_packets = 6;
+  uint64 multicast_xmit_packets = 7;
+  uint64 port_rcv_constraint_errors = 8;
+  uint64 port_rcv_data = 9;
+  uint64 port_rcv_errors = 10;
+  uint64 port_rcv_packets = 11;
+  uint64 port_rcv_remote_physical_errors = 12;
+  uint64 port_rcv_switch_relay_errors = 13;
+  uint64 port_xmit_constraint_errors = 14;
+  uint64 port_xmit_data = 15;
+  uint64 port_xmit_discards = 16;
+  uint64 port_xmit_packets = 17;
+  uint64 port_xmit_wait = 18;
+  uint64 symbol_error = 19;
+  uint64 unicast_rcv_packets = 20;
+  uint64 unicast_xmit_packets = 21;
+}
+
+message MlxHwCounter {
   uint64 duplicate_request = 1;
   uint64 implied_nak_seq_err = 2;
   uint64 lifespan = 3;
@@ -93,27 +122,6 @@ message MlxData{
   uint64 rx_icrc_encapsulated = 27;
   uint64 rx_read_requests = 28;
   uint64 rx_write_requests = 29;
-  uint64 vl15_dropped = 30;
-  uint64 excessive_buffer_overrun_errors = 31;
-  uint64 link_downed = 32;
-  uint64 link_error_recovery = 33;
-  uint64 local_link_integrity_errors = 34;
-  uint64 multicast_rcv_packets = 35;
-  uint64 multicast_xmit_packets = 36;
-  uint64 port_rcv_constraint_errors = 37;
-  uint64 port_rcv_data = 38;
-  uint64 port_rcv_errors = 39;
-  uint64 port_rcv_packets = 40;
-  uint64 port_rcv_remote_physical_errors = 41;
-  uint64 port_rcv_switch_relay_errors = 42;
-  uint64 port_xmit_constraint_errors = 43;
-  uint64 port_xmit_data = 44;
-  uint64 port_xmit_discards = 45;
-  uint64 port_xmit_packets = 46;
-  uint64 port_xmit_wait = 47;
-  uint64 symbol_error = 48;
-  uint64 unicast_rcv_packets = 49;
-  uint64 unicast_xmit_packets = 50;
 }
 
 message ReceiveReply {

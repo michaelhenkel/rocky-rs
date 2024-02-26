@@ -6,7 +6,7 @@ use actix_web::{get, App, HttpServer, Responder};
 use actix_web_prom::PrometheusMetricsBuilder;
 
 
-use crate::server::monitor::{Stats, data, RxeData, MlxData, PerSec};
+use crate::server::monitor::{Stats, data, RxeCounter, RxeHwCounter, MlxCounter, MlxHwCounter,PerSec};
 
 #[get("/")]
 async fn index() -> impl Responder {
@@ -60,13 +60,21 @@ impl WebServer {
                 let port = meta.port.clone();
                 match data.data.unwrap(){
                     data::Data::Mlx(data) => {
-                        let values = get_data_values(&data);
+                        let values = get_data_values(&data.mlx_counter.as_ref().unwrap());
+                        for (k,v) in values.iter(){
+                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
+                        }
+                        let values = get_data_values(&data.mlx_hw_counter.as_ref().unwrap());
                         for (k,v) in values.iter(){
                             Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
                         }
                     },
                     data::Data::Rxe(data) => {
-                        let values = get_data_values(&data);
+                        let values = get_data_values(&data.rxe_counter.as_ref().unwrap());
+                        for (k,v) in values.iter(){
+                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
+                        }
+                        let values = get_data_values(&data.rxe_hw_counter.as_ref().unwrap());
                         for (k,v) in values.iter(){
                             Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
                         }
@@ -111,9 +119,13 @@ fn setup_metrics() -> (Registry, HashMap<String, GaugeVec>){
     let registry = Registry::new();
     let mut gauge_map = HashMap::new();
     let mut fields_map = HashSet::new();
-    let rxe_data = RxeData::default();
+    let rxe_data = RxeHwCounter::default();
     get_data_fields(&rxe_data, &mut fields_map);
-    let mlx_data = MlxData::default();
+    let rxe_data = RxeCounter::default();
+    get_data_fields(&rxe_data, &mut fields_map);
+    let mlx_data = MlxCounter::default();
+    get_data_fields(&mlx_data, &mut fields_map);
+    let mlx_data = MlxHwCounter::default();
     get_data_fields(&mlx_data, &mut fields_map);
     let per_sec_data = PerSec::default();
     get_data_fields(&per_sec_data, &mut fields_map);

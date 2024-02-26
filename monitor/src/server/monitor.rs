@@ -30,9 +30,9 @@ pub mod data {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Data {
         #[prost(message, tag = "1")]
-        Rxe(super::RxeData),
+        Rxe(super::Rxe),
         #[prost(message, tag = "2")]
-        Mlx(super::MlxData),
+        Mlx(super::Mlx),
     }
 }
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -48,10 +48,21 @@ pub struct PerSec {
     #[prost(double, tag = "6")]
     pub packets_rcv_per_sec: f64,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Rxe {
+    #[prost(message, optional, tag = "1")]
+    pub rxe_counter: ::core::option::Option<RxeCounter>,
+    #[prost(message, optional, tag = "2")]
+    pub rxe_hw_counter: ::core::option::Option<RxeHwCounter>,
+}
+#[path_resolver::derive_path::derive_path(
+    path = "/sys/class/infiniband/{{ interface }}/ports/{{ port }}/hw_counters"
+)]
 #[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RxeData {
+pub struct RxeHwCounter {
     #[prost(uint64, tag = "1")]
     pub duplicate_request: u64,
     #[prost(uint64, tag = "2")]
@@ -85,23 +96,85 @@ pub struct RxeData {
     #[prost(uint64, tag = "16")]
     pub ack_deferred: u64,
     #[prost(uint64, tag = "17")]
-    pub port_rcv_data: u64,
-    #[prost(uint64, tag = "18")]
     pub port_xmit_data: u64,
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PathOption {
-    #[prost(string, tag = "1")]
-    pub path_option: ::prost::alloc::string::String,
-}
 #[path_resolver::derive_path::derive_path(
-    path = "/sys/net/{{ linux_interface }}/statistics"
+    path = "/sys/class/net/{{ linux_interface }}/statistics"
 )]
 #[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct MlxData {
+pub struct RxeCounter {
+    #[prost(uint64, tag = "1")]
+    pub rx_bytes: u64,
+    #[prost(uint64, tag = "2")]
+    pub tx_bytes: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Mlx {
+    #[prost(message, optional, tag = "1")]
+    pub mlx_counter: ::core::option::Option<MlxCounter>,
+    #[prost(message, optional, tag = "2")]
+    pub mlx_hw_counter: ::core::option::Option<MlxHwCounter>,
+}
+#[path_resolver::derive_path::derive_path(
+    path = "/sys/class/infiniband/{{ interface }}/ports/{{ port }}/counters"
+)]
+#[derive(serde::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MlxCounter {
+    #[prost(uint64, tag = "1")]
+    pub vl15_dropped: u64,
+    #[prost(uint64, tag = "2")]
+    pub excessive_buffer_overrun_errors: u64,
+    #[prost(uint64, tag = "3")]
+    pub link_downed: u64,
+    #[prost(uint64, tag = "4")]
+    pub link_error_recovery: u64,
+    #[prost(uint64, tag = "5")]
+    pub local_link_integrity_errors: u64,
+    #[prost(uint64, tag = "6")]
+    pub multicast_rcv_packets: u64,
+    #[prost(uint64, tag = "7")]
+    pub multicast_xmit_packets: u64,
+    #[prost(uint64, tag = "8")]
+    pub port_rcv_constraint_errors: u64,
+    #[prost(uint64, tag = "9")]
+    pub port_rcv_data: u64,
+    #[prost(uint64, tag = "10")]
+    pub port_rcv_errors: u64,
+    #[prost(uint64, tag = "11")]
+    pub port_rcv_packets: u64,
+    #[prost(uint64, tag = "12")]
+    pub port_rcv_remote_physical_errors: u64,
+    #[prost(uint64, tag = "13")]
+    pub port_rcv_switch_relay_errors: u64,
+    #[prost(uint64, tag = "14")]
+    pub port_xmit_constraint_errors: u64,
+    #[prost(uint64, tag = "15")]
+    pub port_xmit_data: u64,
+    #[prost(uint64, tag = "16")]
+    pub port_xmit_discards: u64,
+    #[prost(uint64, tag = "17")]
+    pub port_xmit_packets: u64,
+    #[prost(uint64, tag = "18")]
+    pub port_xmit_wait: u64,
+    #[prost(uint64, tag = "19")]
+    pub symbol_error: u64,
+    #[prost(uint64, tag = "20")]
+    pub unicast_rcv_packets: u64,
+    #[prost(uint64, tag = "21")]
+    pub unicast_xmit_packets: u64,
+}
+#[path_resolver::derive_path::derive_path(
+    path = "/sys/class/infiniband/{{ interface }}/ports/{{ port }}/hw_counters"
+)]
+#[derive(serde::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MlxHwCounter {
     #[prost(uint64, tag = "1")]
     pub duplicate_request: u64,
     #[prost(uint64, tag = "2")]
@@ -160,48 +233,6 @@ pub struct MlxData {
     pub rx_read_requests: u64,
     #[prost(uint64, tag = "29")]
     pub rx_write_requests: u64,
-    #[prost(uint64, tag = "30")]
-    pub vl15_dropped: u64,
-    #[prost(uint64, tag = "31")]
-    pub excessive_buffer_overrun_errors: u64,
-    #[prost(uint64, tag = "32")]
-    pub link_downed: u64,
-    #[prost(uint64, tag = "33")]
-    pub link_error_recovery: u64,
-    #[prost(uint64, tag = "34")]
-    pub local_link_integrity_errors: u64,
-    #[prost(uint64, tag = "35")]
-    pub multicast_rcv_packets: u64,
-    #[prost(uint64, tag = "36")]
-    pub multicast_xmit_packets: u64,
-    #[prost(uint64, tag = "37")]
-    pub port_rcv_constraint_errors: u64,
-    #[prost(uint64, tag = "38")]
-    pub port_rcv_data: u64,
-    #[prost(uint64, tag = "39")]
-    pub port_rcv_errors: u64,
-    #[prost(uint64, tag = "40")]
-    pub port_rcv_packets: u64,
-    #[prost(uint64, tag = "41")]
-    pub port_rcv_remote_physical_errors: u64,
-    #[prost(uint64, tag = "42")]
-    pub port_rcv_switch_relay_errors: u64,
-    #[prost(uint64, tag = "43")]
-    pub port_xmit_constraint_errors: u64,
-    #[prost(uint64, tag = "44")]
-    pub port_xmit_data: u64,
-    #[prost(uint64, tag = "45")]
-    pub port_xmit_discards: u64,
-    #[prost(uint64, tag = "46")]
-    pub port_xmit_packets: u64,
-    #[prost(uint64, tag = "47")]
-    pub port_xmit_wait: u64,
-    #[prost(uint64, tag = "48")]
-    pub symbol_error: u64,
-    #[prost(uint64, tag = "49")]
-    pub unicast_rcv_packets: u64,
-    #[prost(uint64, tag = "50")]
-    pub unicast_xmit_packets: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
