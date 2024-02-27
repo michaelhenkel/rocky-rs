@@ -91,10 +91,9 @@ impl WebServer {
                     },
                     InterfaceStatsReport::Report(report) => {
                         let hostname = report.hostname.clone();
-                        let uuid = report.uuid.clone();
                         let values = get_data_values(&report.bw_results.as_ref().unwrap());
                         for (k,v) in values.iter(){
-                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &uuid]).set(*v);
+                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname]).set(*v);
                         }
                         info!("Received report");
                     }
@@ -155,7 +154,7 @@ fn setup_metrics() -> (Registry, HashMap<String, GaugeVec>){
     get_data_fields(&bw_results, &mut fields_map);
     for field in fields_map.iter(){
         let opts = Opts::new(field.to_string(), field.to_string());
-        let gauge = GaugeVec::new(opts, &["hostname","uuid"]).unwrap();
+        let gauge = GaugeVec::new(opts, &["hostname"]).unwrap();
         registry.register(Box::new(gauge.clone())).unwrap();
         gauge_map.insert(field.to_string(), gauge);
     }
