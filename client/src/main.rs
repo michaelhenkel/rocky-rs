@@ -3,8 +3,7 @@ use byte_unit::Byte;
 use gui::gui::Gui;
 use rocky_rs::connection_manager::connection_manager::{
     initiator_connection_client::InitiatorConnectionClient, 
-    stats_manager_client::StatsManagerClient, 
-    Mode, Mtu, Operation, ReportList, ReportRequest, Request
+    Mode, Mtu, Operation, Request
 };
 use serde::{Deserialize, Serialize};
 use clap::{Parser, Subcommand};
@@ -58,28 +57,7 @@ enum Commands {
         #[clap(short='D', long)]
         duration: Option<u32>,
     },
-    Stats {
-        #[clap(short, long)]
-        address: String,
-        #[clap(short, long)]
-        port: u16,
-        #[clap(subcommand)]
-        command: StatsCommands,
-    },
     Gui{},
-}
-
-#[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
-enum StatsCommands {
-    Get {
-        uuid: String,
-        suffix: String,
-    },
-    List,
-    Remove {
-        uuid: String,
-        suffix: String,
-    },
 }
 
 #[derive(Parser, Debug, Clone, Serialize, Deserialize)]
@@ -294,19 +272,6 @@ async fn main() -> anyhow::Result<()> {
                 send(request, initiator.unwrap(), initiator_port.unwrap()).await?;
             }
         },
-        Commands::Stats{address, port, command} => {
-            match command {
-                StatsCommands::Get{uuid, suffix} => {
-                    stats_get(uuid, suffix, address, port).await?;
-                },
-                StatsCommands::List => {
-                    stats_list(address, port).await?;
-                },
-                StatsCommands::Remove{uuid, suffix} => {
-                    stats_remove(uuid, suffix, address, port).await?;
-                },
-            }
-        },
         Commands::Gui{} => {
             let gui = Gui::new();
             gui.run();
@@ -320,38 +285,5 @@ async fn send(request: Request, initiator_address: String, initiator_port: u16) 
     let mut client = InitiatorConnectionClient::connect(initiator_address).await?;
     let response = client.initiator(request).await?;
     println!("{}", response.get_ref().uuid);
-    Ok(())
-}
-
-async fn stats_get(uuid: String, suffix: String, address: String, port: u16) -> anyhow::Result<()> {
-    let address = format!("http://{}:{}",address, port);
-    let mut client = StatsManagerClient::connect(address).await?;
-    let request = ReportRequest{
-        uuid,
-        suffix,
-    };
-    let response = client.get_report(request).await?;
-    println!("{:?}", response.get_ref());
-    Ok(())
-}
-
-async fn stats_list(address: String, port: u16) -> anyhow::Result<()> {
-    let address = format!("http://{}:{}",address, port);
-    let mut client = StatsManagerClient::connect(address).await?;
-    let response = client.list_report(()).await?;
-    let report: ReportList = response.into_inner();
-    println!("{:#?}", report);
-    Ok(())
-}
-
-async fn stats_remove(uuid: String, suffix: String, address: String, port: u16) -> anyhow::Result<()> {
-    let address = format!("http://{}:{}",address, port);
-    let mut client = StatsManagerClient::connect(address).await?;
-    let request = ReportRequest{
-        uuid,
-        suffix,
-    };
-    let response = client.delete_report(request).await?;
-    println!("{:?}", response.get_ref());
     Ok(())
 }

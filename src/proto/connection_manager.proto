@@ -10,11 +10,6 @@ service InitiatorConnection {
   rpc Initiator (Request) returns (InitiatorReply) {}
 }
 
-service StatsManager {
-  rpc GetReport (ReportRequest) returns (ReportReply) {}
-  rpc ListReport (google.protobuf.Empty) returns (ReportList) {}
-  rpc DeleteReport (ReportRequest) returns (google.protobuf.Empty) {}
-}
 
 message ServerReply {
   uint32 port = 1;

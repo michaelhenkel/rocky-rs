@@ -20,6 +20,7 @@ fn main() {
     .type_attribute("RxeHwCounter", "#[path_resolver::derive_path::derive_path(path = \"/sys/class/infiniband/{{ interface }}/ports/{{ port }}/hw_counters\")]")
     .type_attribute("RxeHwCounter", "#[derive(serde::Deserialize, serde::Serialize)]")
     .type_attribute("PerSec", "#[derive(serde::Deserialize, serde::Serialize)]")
+    .type_attribute("BwResults", "#[derive(serde::Deserialize, serde::Serialize)]")
     .compile(
         &["monitor/src/proto/monitor.proto"],
         &["proto"]

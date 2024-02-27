@@ -6,7 +6,7 @@ use actix_web::{get, App, HttpServer, Responder};
 use actix_web_prom::PrometheusMetricsBuilder;
 
 
-use crate::server::monitor::{Stats, data, RxeCounter, RxeHwCounter, MlxCounter, MlxHwCounter,PerSec};
+use crate::server::monitor::{data, BwResults, InterfaceStats, MlxCounter, MlxHwCounter, PerSec, Report, RxeCounter, RxeHwCounter};
 
 #[get("/")]
 async fn index() -> impl Responder {
@@ -39,52 +39,67 @@ impl WebServer {
         );
         Ok(())
     }
-    pub async fn server(&self, mut stats_rx: mpsc::Receiver<Stats>) -> anyhow::Result<()> {
+    pub async fn server(&self, mut stats_rx: mpsc::Receiver<InterfaceStatsReport>) -> anyhow::Result<()> {
         let mut prometheus = PrometheusMetricsBuilder::new("api")
             .endpoint("/metrics")
             .build()
             .unwrap();
 
-    
         let (reg, gauge_map) = setup_metrics();
-        
         prometheus.registry = reg.clone();
 
         tokio::spawn(async move {
-            while let Some(stats) = stats_rx.recv().await {
-                let data = stats.clone().data.unwrap();
-                let meta = stats.clone().meta.unwrap();
-                let per_sec = data.clone().per_sec.unwrap();
-                let hostname = meta.hostname.clone();
-                let interface = meta.interface.clone();
-                let port = meta.port.clone();
-                match data.data.unwrap(){
-                    data::Data::Mlx(data) => {
-                        let values = get_data_values(&data.mlx_counter.as_ref().unwrap());
-                        for (k,v) in values.iter(){
-                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
-                        }
-                        let values = get_data_values(&data.mlx_hw_counter.as_ref().unwrap());
-                        for (k,v) in values.iter(){
-                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
+            while let Some(interface_stats_report) = stats_rx.recv().await {
+                match interface_stats_report{
+                    InterfaceStatsReport::InterfaceStats(interface_stats) => {
+                        let hostname = interface_stats.hostname.clone();
+                        for (interface, port_stats) in &interface_stats.port_stats{
+                            for (port, data) in &port_stats.data{
+                                let per_sec = data.per_sec.as_ref().unwrap();
+                                
+                                let _elapsed: u128 = ((data.elapsed.as_ref().unwrap().high as u128) << 64) | (data.elapsed.as_ref().unwrap().low as u128);
+                                match data.data.as_ref().unwrap(){
+                                    data::Data::Mlx(data) => {
+                                        let values = get_data_values(&data.mlx_counter.as_ref().unwrap());
+                                        for (k,v) in values.iter(){
+                                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
+                                        }
+                                        let values = get_data_values(&data.mlx_hw_counter.as_ref().unwrap());
+                                        for (k,v) in values.iter(){
+                                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
+                                        }
+                                    },
+                                    data::Data::Rxe(data) => {
+                                        let values = get_data_values(&data.rxe_counter.as_ref().unwrap());
+                                        for (k,v) in values.iter(){
+                                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
+                                        }
+                                        let values = get_data_values(&data.rxe_hw_counter.as_ref().unwrap());
+                                        for (k,v) in values.iter(){
+                                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
+                                        }
+                                    },
+                
+                                }
+                                let values = get_data_values(&per_sec);
+                                for (k,v) in values.iter(){
+                                    Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
+                                }
+        
+                            }
                         }
                     },
-                    data::Data::Rxe(data) => {
-                        let values = get_data_values(&data.rxe_counter.as_ref().unwrap());
+                    InterfaceStatsReport::Report(report) => {
+                        let hostname = report.hostname.clone();
+                        let uuid = report.uuid.clone();
+                        let values = get_data_values(&report.bw_results.as_ref().unwrap());
                         for (k,v) in values.iter(){
-                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
+                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &uuid]).set(*v);
                         }
-                        let values = get_data_values(&data.rxe_hw_counter.as_ref().unwrap());
-                        for (k,v) in values.iter(){
-                            Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
-                        }
-                    },
+                        info!("Received report");
+                    }
+                }
 
-                }
-                let values = get_data_values(&per_sec);
-                for (k,v) in values.iter(){
-                    Pin::new(&mut gauge_map.get(k).unwrap()).with_label_values(&[&hostname, &interface, &port]).set(*v);
-                }
             }
         });
 
@@ -101,7 +116,7 @@ impl WebServer {
     }
 
 
-    pub async fn receive_stats(&self, tx: mpsc::Sender<Stats>) -> anyhow::Result<()> {
+    pub async fn receive_stats(&self, tx: mpsc::Sender<InterfaceStatsReport>) -> anyhow::Result<()> {
         let mut rx = self.rx.write().await;
         while let Some(command) = rx.recv().await {
             match command {
@@ -132,6 +147,15 @@ fn setup_metrics() -> (Registry, HashMap<String, GaugeVec>){
     for field in fields_map.iter(){
         let opts = Opts::new(field.to_string(), field.to_string());
         let gauge = GaugeVec::new(opts, &["hostname","interface","port"]).unwrap();
+        registry.register(Box::new(gauge.clone())).unwrap();
+        gauge_map.insert(field.to_string(), gauge);
+    }
+    let mut fields_map = HashSet::new();
+    let bw_results = BwResults::default();
+    get_data_fields(&bw_results, &mut fields_map);
+    for field in fields_map.iter(){
+        let opts = Opts::new(field.to_string(), field.to_string());
+        let gauge = GaugeVec::new(opts, &["hostname","uuid"]).unwrap();
         registry.register(Box::new(gauge.clone())).unwrap();
         gauge_map.insert(field.to_string(), gauge);
     }
@@ -184,8 +208,8 @@ impl WebServerClient{
             tx,
         }
     }
-    pub async fn add(&self, stats: Stats) -> anyhow::Result<()> {
-        if let Err(e) = self.tx.send(WebServerCommand::Add(stats)).await{
+    pub async fn add(&self, stats_report: InterfaceStatsReport) -> anyhow::Result<()> {
+        if let Err(e) = self.tx.send(WebServerCommand::Add(stats_report)).await{
             error!("Error sending stats to web server: {}", e);
             return Err(anyhow::anyhow!("Error sending stats to web server: {}", e));
         }
@@ -193,7 +217,12 @@ impl WebServerClient{
     }
 
 }
-
 pub enum WebServerCommand{
-    Add(Stats),
+    Add(InterfaceStatsReport),
+
+}
+
+pub enum InterfaceStatsReport{
+    InterfaceStats(InterfaceStats),
+    Report(Report),
 }

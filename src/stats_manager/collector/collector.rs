@@ -4,7 +4,11 @@ use log::{error, info};
 use serde_value::Value;
 use serde_json::json;
 use crate::monitor_client::monitor_client::Client;
-use monitor::server::monitor::{Stats, Meta, Data, Rxe, RxeCounter, RxeHwCounter, Mlx, MlxCounter, MlxHwCounter, PerSec, data};
+use monitor::server::monitor::{
+    Data, Rxe, RxeCounter,
+    RxeHwCounter, Mlx, MlxCounter, MlxHwCounter, PerSec, data,
+    InterfaceStats, PortStats, Elapsed,
+};
 use gethostname;
 use path_resolver::path_trait::PathResolver;
 
@@ -63,10 +67,8 @@ impl Driver{
                 let mut rxe = Rxe::default();
                 rxe.rxe_counter = Some(rxe_counter);
                 rxe.rxe_hw_counter = Some(rxe_hw_counter);
-                info!("{:?}", rxe);
                 let mut monitor_data = Data::default();
                 monitor_data.data = Some(data::Data::Rxe(rxe));
-                //info!("{:?}", monitor_data);
                 monitor_data
             },
         };
@@ -190,15 +192,19 @@ impl Collector{
     }
 }
 
-async fn count(freq: u64, interfaces: Vec<Interface>, tx: tokio::sync::mpsc::Sender<Stats>, driver: Driver) -> anyhow::Result<()>{
+async fn count(freq: u64, interfaces: Vec<Interface>, tx: tokio::sync::mpsc::Sender<InterfaceStats>, driver: Driver) -> anyhow::Result<()>{
     let hostname = gethostname::gethostname().to_string_lossy().to_string();
     let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(freq));
     let secs: f64 = freq as f64 / 1000 as f64;
     let mut history: HashMap<String,u64> = HashMap::new();
     info!("interfaces: {:?}", interfaces);
     loop{
+        let now = tokio::time::Instant::now();
+        let mut interface_stats = InterfaceStats::default();
+        interface_stats.hostname = hostname.clone();
         interval.tick().await;
         for interface in &interfaces{
+            let mut port_stats = PortStats::default();
             for port in &interface.ports{
                 let mut counters = driver.get_counters(&interface.name, port, &interface.linux_name);
                 let per_sec = counters.per_sec.as_mut().unwrap();
@@ -248,19 +254,18 @@ async fn count(freq: u64, interfaces: Vec<Interface>, tx: tokio::sync::mpsc::Sen
                     }
                 }
                 history.insert(prev_port_xmit_data_key, xmit_data);
-                
-                let stats = Stats{
-                    meta: Some(Meta{
-                        hostname: hostname.clone(),
-                        interface: interface.name.clone(),
-                        port: port.clone(),
-                    }),
-                    data: Some(counters),
+                let elapsed = tokio::time::Instant::now().duration_since(now).as_millis();
+                let elapsed = Elapsed{
+                    high: (elapsed >> 64) as u64,
+                    low: elapsed as u64,
                 };
-                if let Err(e) = tx.send(stats).await{
-                    error!("Error sending counters: {}", e);
-                }
+                counters.elapsed = Some(elapsed);
+                port_stats.data.insert(port.clone(), counters);
             }
+            interface_stats.port_stats.insert(interface.name.clone(), port_stats);
+        }
+        if let Err(e) = tx.send(interface_stats).await{
+            error!("Error sending counters: {}", e);
         }
     }
 }

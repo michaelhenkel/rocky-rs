@@ -1,25 +1,28 @@
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{fmt::Display, sync::Arc};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use crate::connection_manager::connection_manager::{
+use monitor::server::monitor::{
     Report as GrpcReport,
     TestInfo as GrpcTestInfo,
-    BwResults as GrpcBwResults,
+    BwResults as GrpcBwResults
 };
+use crate::stats_client::{stats_client::Client as StatsClient};
 
 pub struct StatsManager{
     client: Client,
-    rx: Arc<RwLock<tokio::sync::mpsc::Receiver<Command>>>
+    rx: Arc<RwLock<tokio::sync::mpsc::Receiver<Command>>>,
+    stats_client: Option<StatsClient>,
 }
 
 impl StatsManager{
-    pub fn new() -> StatsManager{
+    pub fn new(stats_client: Option<StatsClient>) -> StatsManager{
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         StatsManager{
             client: Client::new(tx),
-            rx: Arc::new(RwLock::new(rx))
+            rx: Arc::new(RwLock::new(rx)),
+            stats_client,
         }
     }
     pub fn client(&self) -> Client{
@@ -28,44 +31,26 @@ impl StatsManager{
     pub async fn run(&self) -> anyhow::Result<()>{
         let rx = self.rx.clone();
         let mut rx = rx.write().await;
-        let mut stats_map = HashMap::new();
-        loop {
-            while let Some(command) = rx.recv().await{
-                match command{
-                    Command::Get{uuid, suffix, tx} => {
-                        let report = stats_map.get(&(uuid.clone(), suffix.clone())).cloned();
-                        tx.send(report).unwrap();
-                    },
-                    Command::List{tx} => {
-                        tx.send(stats_map.clone()).unwrap();
-                    },
-                    Command::Add{uuid, suffix} => {
+
+        while let Some(command) = rx.recv().await{
+            match command{
+                Command::Add{uuid, suffix} => {
+                    if let Some(stats_client) = &self.stats_client{
                         let report = Report::new(&uuid, &suffix);
-                        stats_map.insert((uuid, suffix), report);
-                    },
-                    Command::Remove{uuid, suffix} => {
-                        stats_map.remove(&(uuid, suffix));
-                    },
-                }
+                        let grpc_report: GrpcReport = report.clone().into();
+                        if let Err(e) = stats_client.add(grpc_report).await{
+                            log::error!("Error sending report to monitor: {}", e);
+                        }
+                    }
+                },
             }
         }
+        Ok(())
     }
 }
 
 pub enum Command{
-    Get{
-        uuid: String,
-        suffix: String,
-        tx: tokio::sync::oneshot::Sender<Option<Report>>,
-    },
-    List{
-        tx: tokio::sync::oneshot::Sender<HashMap<(String,String),Report>>
-    },
     Add{
-        uuid: String,
-        suffix: String,
-    },
-    Remove{
         uuid: String,
         suffix: String,
     },
@@ -79,37 +64,28 @@ impl Client{
     pub fn new(tx: tokio::sync::mpsc::Sender<Command>) -> Client{
         Client{tx}
     }
-    pub async fn get(&self, uuid: String, suffix: String) -> anyhow::Result<Option<Report>>{
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.tx.send(Command::Get{uuid, suffix, tx}).await?;
-        Ok(rx.await?)
-    }
-    pub async fn list(&self) -> anyhow::Result<HashMap<(String,String),Report>>{
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.tx.send(Command::List{tx}).await?;
-        Ok(rx.await?)
-    }
     pub async fn add(&self, uuid: String, suffix: String) -> anyhow::Result<()>{
         self.tx.send(Command::Add{uuid, suffix}).await?;
-        Ok(())
-    }
-    pub async fn remove(&self, uuid: String, suffix: String) -> anyhow::Result<()>{
-        self.tx.send(Command::Remove{uuid, suffix}).await?;
         Ok(())
     }
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Report{
+    hostname: Option<String>,
+    uuid: Option<String>,
     test_info: TestInfo,
     results: BwResults,
 }
 
 impl Report{
     pub fn new(uuid: &str, suffix: &str) -> Report{
+        let hostname = hostname::get().unwrap().into_string().unwrap();
         let output = std::fs::read_to_string(format!("/tmp/{}-{}.json",uuid, suffix)).unwrap();
         let quoted_string = quote_strings(&output);
-        let results: Report = serde_json::from_str(&quoted_string).unwrap();
+        let mut results: Report = serde_json::from_str(&quoted_string).unwrap();
+        results.uuid = Some(uuid.to_string());
+        results.hostname = Some(hostname.to_string());
         results
     }
 }
@@ -144,6 +120,8 @@ impl Into<GrpcReport> for Report{
             msg_rate: self.results.msg_rate as f64,
         };
         GrpcReport{
+            hostname: self.hostname.unwrap(),
+            uuid: self.uuid.unwrap(),
             test_info: Some(grpc_test_info),
             bw_results: Some(grpc_bw_results),
         }

@@ -4,18 +4,20 @@ import "google/protobuf/descriptor.proto";
 package monitor;
 
 service MonitorServer {
-  rpc SendStats (stream Stats) returns (ReceiveReply) {}
+  rpc SendStats (stream InterfaceStats) returns (ReceiveReply) {}
 }
 
-message Stats {
-    Meta meta = 1;
-    Data data = 2;
+service ReportServer {
+  rpc SendReport (Report) returns (ReceiveReply) {}
 }
 
-message Meta{
-    string hostname = 1;
-    string interface = 2;
-    string port = 3;
+message InterfaceStats{
+  string hostname = 1;
+  map<string, PortStats> port_stats = 2;
+}
+
+message PortStats{
+    map<string, Data> data = 1;
 }
 
 message Data{
@@ -24,6 +26,12 @@ message Data{
     Mlx mlx = 2;
   }
   PerSec per_sec = 3;
+  Elapsed elapsed = 4;
+}
+
+message Elapsed {
+  uint64 low = 1;
+  uint64 high = 2;
 }
 
 message PerSec{
@@ -126,4 +134,40 @@ message MlxHwCounter {
 
 message ReceiveReply {
     string message = 1;
+}
+
+message Report{
+  string hostname = 1;
+  string uuid = 2;
+  TestInfo test_info = 4;
+  BwResults bw_results = 5;
+}
+
+message BwResults{
+  uint32 msg_size = 1;
+  uint32 n_iterations = 2;
+  double bw_peak = 3;
+  double bw_average = 4;
+  double msg_rate = 5;
+}
+
+message TestInfo{
+  string test = 1;
+  string dual_port = 2;
+  string device = 3;
+  uint32 number_of_qps = 4;
+  string transport_type = 5;
+  string connection_type = 6;
+  string using_srq = 7;
+  string pci_relax_order = 8;
+  string ibv_wr_api = 9;
+  optional uint32 tx_depth = 10;
+  optional uint32 rx_depth = 11;
+  uint32 cq_moderation = 12;
+  uint32 mtu = 13;
+  string link_type = 14;
+  uint32 gid_index = 15;
+  uint32 max_inline_data = 16;
+  string rdma_cm_qps = 17;
+  string data_ex_method = 18;
 }

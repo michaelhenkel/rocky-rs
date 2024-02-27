@@ -1,6 +1,8 @@
 use clap::Parser;
 use rocky_rs::monitor_client::monitor_client::MonitorClient;
+
 use rocky_rs::stats_manager::collector::collector::Collector;
+use rocky_rs::stats_client::stats_client::StatsClient;
 use rocky_rs::connection_manager::connection_manager::server_connection_client::ServerConnectionClient;
 use rocky_rs::connection_manager::connection_manager::{Mode, Mtu, Operation};
 use rocky_rs::connection_manager::connection_manager::{
@@ -10,11 +12,8 @@ use rocky_rs::connection_manager::connection_manager::{
     initiator_connection_server::{
         InitiatorConnection, InitiatorConnectionServer,
     },
-    stats_manager_server::{
-        StatsManager as GrpcStatsManager, StatsManagerServer,
-    },
     InitiatorReply, Request,
-    ServerReply, Report, ReportReply, ReportList, ReportRequest,
+    ServerReply,
 };
 use tonic::{transport::Server as GrpcServer,Request as GrpcRequest, Status};
 use log::{error, info};
@@ -51,16 +50,24 @@ async fn main() -> anyhow::Result<()>{
     let args = Args::parse();
     let mut jh_list = Vec::new();
     let mut monitor_client_client = None;
+    let mut stats_client_client = None;
     if let Some(stats_server) = args.stats_server{
         info!("starting monitor client with stats server: {}", stats_server);
-        let monitor_client = MonitorClient::new(stats_server);
+        let monitor_client = MonitorClient::new(stats_server.clone());
         monitor_client_client = Some(monitor_client.client());
         let jh = tokio::spawn(async move{
             let _res = monitor_client.run().await;
         });
         jh_list.push(jh);
+        let stats_client = StatsClient::new(stats_server);
+        stats_client_client = Some(stats_client.client());
+        let jh = tokio::spawn(async move{
+            let _res = stats_client.run().await;
+        });
+        jh_list.push(jh);
     }
-    let stats_manager = StatsManager::new();
+    
+    let stats_manager = StatsManager::new(stats_client_client);
     let collector = Collector::new(args.frequency.unwrap_or(1000), monitor_client_client, args.driver);
     let rocky = Rocky::new(args.address, args.port, args.device, stats_manager.client());
     let jh = tokio::spawn(async move{
@@ -149,69 +156,6 @@ impl InitiatorConnection for Rocky {
     }
 }
 
-#[tonic::async_trait]
-impl GrpcStatsManager for Rocky {
-    async fn get_report(
-        &self,
-        request: tonic::Request<ReportRequest>,
-    ) -> Result<tonic::Response<ReportReply>, tonic::Status> {
-        let request = request.into_inner();
-        let suffix = request.suffix;
-        let uuid = request.uuid;
-        let report = match self.client.get(uuid.clone(), suffix.clone()).await{
-            Ok(report) => report,
-            Err(e) => {
-                error!("get error: {:?}", e);
-                return Err(Status::internal(e.to_string()));
-            },
-        };
-        let report_reply = if let Some(report) = report{
-            let report: Report = report.into();
-            Some(report)
-        } else {
-            None
-        };
-        
-        let report_reply = ReportReply{
-            report: report_reply,
-        };
-        Ok(tonic::Response::new(report_reply))
-    }
-    async fn list_report(
-        &self,
-        _request: tonic::Request<()>,
-    ) -> Result<tonic::Response<ReportList>, tonic::Status> {
-
-        let reports = match self.client.list().await{
-            Ok(reports) => reports,
-            Err(e) => {
-                error!("list error: {:?}", e);
-                return Err(Status::internal(e.to_string()));
-            },
-        };
-        let mut report_list = ReportList::default();
-        for ((uuid, suffix), report) in reports{
-            let key = format!("{}__{}", uuid, suffix);
-            let report: Report = report.into(); 
-            report_list.reports.insert(key, report);
-        }
-        Ok(tonic::Response::new(report_list))
-    }
-    async fn delete_report(
-        &self,
-        request: tonic::Request<ReportRequest>,
-    ) -> Result<tonic::Response<()>, tonic::Status> {
-        let request = request.into_inner();
-        let uuid = request.uuid;
-        let suffix = request.suffix;
-        if let Err(e) = self.client.remove(uuid, suffix).await{
-            error!("delete error: {:?}", e);
-            return Err(Status::internal(e.to_string()));
-        }
-        Ok(tonic::Response::new(()))
-    }
-}
-
 
 impl Rocky{
     pub fn new(address: String, port: u16, device: Option<String>, client: Client) -> Rocky {
@@ -229,7 +173,6 @@ impl Rocky{
         GrpcServer::builder()
         .add_service(ServerConnectionServer::new(self.clone()))
         .add_service(InitiatorConnectionServer::new(self.clone()))
-        .add_service(StatsManagerServer::new(self.clone()))
         .serve(addr)
         .await?;
         Ok(())
@@ -292,7 +235,7 @@ pub async fn listen(mut request: Request, device_name: Option<String>, port: u16
     info!("listening on port {}", port);
 
     request.server_port = port as u32;
-    let mut cmd = request_to_cmd(request.clone(), device_name, "server");
+    let mut cmd = request_to_cmd(request.clone(), device_name.clone(), "server");
     let mut child = cmd.
         stdout(Stdio::piped()).
         stderr(Stdio::piped()).

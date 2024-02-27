@@ -3,11 +3,12 @@ use tokio_stream::StreamExt;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 use clap::Parser;
 use monitor::server::monitor::{
-    monitor_server_server::{MonitorServer, MonitorServerServer}, 
-    Stats, ReceiveReply
+    monitor_server_server::{MonitorServer, MonitorServerServer},
+    InterfaceStats, ReceiveReply, Report,
+    report_server_server::{ReportServer, ReportServerServer},
+    
 };
-use monitor::stats_db::stats_db::{StatsDb, StatsDbClient};
-use monitor::web_server::web_server::{WebServer, WebServerClient};
+use monitor::web_server::web_server::{WebServer, WebServerClient, InterfaceStatsReport};
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -22,12 +23,10 @@ pub struct Args {
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
     let args = Args::parse();
-    let stats_db = StatsDb::new();
     let web_server = WebServer::new(args.address.clone());
-    let monitor = Monitor::new(args.grpc_address.clone(), stats_db.client(), web_server.client());
+    let monitor = Monitor::new(args.grpc_address.clone(), web_server.client());
     let _res = tokio::join!(
         monitor.run(),
-        stats_db.run(),
         web_server.run(),
     );
     Ok(())
@@ -36,15 +35,13 @@ async fn main() -> anyhow::Result<()> {
 #[derive(Clone)]
 pub struct Monitor{
     address: String,
-    db_client: StatsDbClient,
     web_server_client: WebServerClient,
 }
 
 impl Monitor {
-    pub fn new(address: String, db_client: StatsDbClient, web_server_client: WebServerClient) -> Self {
+    pub fn new(address: String, web_server_client: WebServerClient) -> Self {
         Monitor{
             address,
-            db_client,
             web_server_client,
         }
     }
@@ -52,6 +49,7 @@ impl Monitor {
         info!("Server listening on {}", self.address);
         Server::builder()
         .add_service(MonitorServerServer::new(self.clone()))
+        .add_service(ReportServerServer::new(self.clone()))
         .serve(self.address.parse()?)
         .await?;
         Ok(())
@@ -59,20 +57,32 @@ impl Monitor {
 }
 
 #[tonic::async_trait]
+impl ReportServer for Monitor {
+    async fn send_report(
+        &self,
+        request: Request<Report>,
+    ) -> Result<Response<ReceiveReply>, Status> {
+        info!("Received report");
+        let report = request.into_inner();
+        if let Err(e) = self.web_server_client.add(InterfaceStatsReport::Report(report)).await{
+            error!("Error sending report to web server: {}", e);
+            return Err(Status::internal(e.to_string()));
+        }
+        Ok(Response::new(ReceiveReply::default()))
+    }
+}
+
+#[tonic::async_trait]
 impl MonitorServer for Monitor {
     async fn send_stats(
         &self,
-        request: Request<Streaming<Stats>>,
+        request: Request<Streaming<InterfaceStats>>,
     ) -> Result<Response<ReceiveReply>, Status> {
         info!("Received request");
         let mut stream = request.into_inner();
         while let Some(stats) = stream.next().await {
             let stats = stats?;
-            if let Err(e) = self.db_client.insert(stats.clone()).await{
-                error!("Error inserting stats: {}", e);
-                return Err(Status::internal(e.to_string()));
-            }
-            if let Err(e) = self.web_server_client.add(stats).await{
+            if let Err(e) = self.web_server_client.add(InterfaceStatsReport::InterfaceStats(stats)).await{
                 error!("Error sending stats to web server: {}", e);
                 return Err(Status::internal(e.to_string()));
             }

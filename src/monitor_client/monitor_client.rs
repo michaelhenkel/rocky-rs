@@ -2,11 +2,11 @@ use log::{error, info};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Request;
-use monitor::server::monitor::{monitor_server_client::MonitorServerClient, Stats};
+use monitor::server::monitor::{monitor_server_client::MonitorServerClient, InterfaceStats};
 
 pub struct MonitorClient {
     pub client: Client,
-    pub rx: mpsc::Receiver<Stats>,
+    pub rx: mpsc::Receiver<InterfaceStats>,
     pub address: String
 }
 
@@ -37,16 +37,16 @@ impl MonitorClient {
 
 #[derive(Clone)]
 pub struct Client{
-    pub tx: mpsc::Sender<Stats>,
+    pub tx: mpsc::Sender<InterfaceStats>,
 }
 
 impl Client {
-    pub fn new(tx: mpsc::Sender<Stats>) -> Self {
+    pub fn new(tx: mpsc::Sender<InterfaceStats>) -> Self {
         Client {
             tx,
         }
     }
-    pub async fn send(&self, stats: Stats) -> anyhow::Result<()> {
+    pub async fn send(&self, stats: InterfaceStats) -> anyhow::Result<()> {
         self.tx.send(stats).await?;
         Ok(())
     }
